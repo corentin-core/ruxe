@@ -4,15 +4,16 @@
 
 **BEFORE committing changes**, you MUST:
 
-1. **Run tests** to verify your changes don't break existing functionality
-2. **Run linters** to ensure code quality
+1. **Run linters** to ensure code quality
+2. **Run tests** to verify your changes don't break existing functionality
 
 ```bash
-# Run tests first
-cargo test
-
-# Run clippy
+# Run linters first
 cargo clippy -- -D warnings
+cargo fmt -- --check
+
+# Then run tests
+cargo test
 
 # Then commit
 git add <files> && git commit -m "message"

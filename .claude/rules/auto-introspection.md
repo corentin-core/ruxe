@@ -4,10 +4,10 @@
 
 This rule activates **automatically** when the user:
 
-- Contradicts you ("non", "c'est faux", "tu as tort")
-- Points out an error ("tu as fait une erreur", "c'est pas ça", "mauvaise analyse")
-- Corrects your work ("ça sert à rien de...", "il fallait plutôt...")
-- Expresses frustration with your output ("c'est nul", "recommence")
+- Contradicts you ("no", "that's wrong", "you're mistaken")
+- Points out an error ("you made a mistake", "that's not it", "bad analysis")
+- Corrects your work ("there's no point in...", "you should have...")
+- Expresses frustration with your output ("this is bad", "start over")
 
 ## Response Pattern
 
@@ -16,15 +16,15 @@ When triggered, **always** end your response with a proposal to update your conf
 ```markdown
 ---
 
-**Proposition d'amélioration :**
+**Improvement proposal:**
 
-J'ai fait l'erreur de [description concise]. Pour éviter ça à l'avenir :
+I made the mistake of [concise description]. To avoid this in the future:
 
-- **Fichier à modifier** : `.claude/rules/X.md` | `.claude/skills/X/SKILL.md` |
+- **File to modify**: `.claude/rules/X.md` | `.claude/skills/X/SKILL.md` |
   `CLAUDE.md`
-- **Changement proposé** : [description du changement]
+- **Proposed change**: [description of the change]
 
-Veux-tu que j'applique cette modification ?
+Should I apply this change?
 ```
 
 ## Decision Tree

@@ -71,7 +71,9 @@
       "Bash(git push origin master:*)",
       "Bash(rm -rf:*)",
       "Bash(rm -r:*)",
-      "Bash(cargo publish:*)"
+      "Bash(cargo publish:*)",
+      "Bash(gh api:* -X DELETE:*)",
+      "Bash(gh api:* --method DELETE:*)"
     ]
   }
 }

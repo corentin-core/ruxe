@@ -42,12 +42,39 @@ Once design is approved:
 - Add the design to the GitHub issue body or as a comment
 - This documents the agreed approach for future reference
 
-### 5. Implement
+### 5. Create progress tracking file
+
+After the plan is validated, create `implementation-progress.md` at the worktree root
+(NOT in `/tmp` — it must survive restarts):
+
+```markdown
+# Implementation Progress: Issue #<number>
+
+## Status: In Progress (0%)
+
+## Plan
+
+- [ ] `src/file1.rs` - Description
+- [ ] `src/file2.rs` - Description
+- [ ] `tests/test_file.rs` - Tests
+- [ ] Run quality checks
+```
+
+Update this file as you complete each step:
+
+- Check off completed items
+- Update the percentage in the Status line
+- This lets the user follow progress and helps you resume after interruptions
+
+Delete `implementation-progress.md` after the PR is merged.
+
+### 6. Implement
 
 Only after user gives explicit "go":
 
 - Implement the feature
 - Write tests
+- Update `implementation-progress.md` after each step
 - Commit and create PR
 
 ## Example workflow

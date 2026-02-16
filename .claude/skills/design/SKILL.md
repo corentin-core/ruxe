@@ -54,6 +54,36 @@ Structure the design with:
 // Show the key traits/structs
 \`\`\`
 
+## UML Diagrams
+
+Include Mermaid diagrams to illustrate the solution:
+
+\`\`\`mermaid
+classDiagram
+    class Store~S~ {
+        -state: S
+        +dispatch(event: Event) Result~S, DispatchError~
+        +get_state() &S
+    }
+\`\`\`
+
+\`\`\`mermaid
+sequenceDiagram
+    participant User
+    participant Store
+    participant Middleware
+    participant Reducer
+    User->>Store: dispatch(event)
+    Store->>Middleware: call(event)
+    Middleware->>Reducer: reduce(state, event)
+\`\`\`
+
+Use the appropriate diagram type:
+- **classDiagram** — trait/struct relationships, associated types
+- **sequenceDiagram** — event dispatch flow, middleware chain
+- **stateDiagram-v2** — state transitions
+- **graph TB** — architecture overview, module dependencies
+
 ## Implementation Details
 
 ### Files to create/modify

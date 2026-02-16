@@ -107,32 +107,11 @@ Only minor suggestions?
 
 ### Step 6: Post inline comments and submit review
 
-Use `gh api` for inline comments and `gh pr review` for the verdict.
+**Only use inline comments.** No summary review — keep feedback concise and actionable,
+directly on the relevant code lines.
 
-## Review Summary Format
-
-```markdown
-## Review Summary
-
-### Verdict: Approve | Changes requested
-
-| Aspect            | Status  |
-| ----------------- | ------- |
-| CI checks         | OK/NOK  |
-| Logic correctness | OK/NOK  |
-| Type safety       | OK/NOK  |
-| Test coverage     | OK/NOK  |
-| Doc comments      | OK/NOK  |
-| Code quality      | OK/NOK  |
-
-### Issues (if any)
-
-1. **[file:line]** - Description
-
-### Suggestions
-
-- ...
-```
+Use `gh api` for inline comments and `gh pr review` for the verdict (approve / request
+changes) with a one-line explanation only.
 
 ## Avoid
 

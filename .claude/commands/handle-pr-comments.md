@@ -39,7 +39,7 @@ For each comment, **one at a time**:
 
 After all comments are addressed:
 
-1. **Run tests**: `cargo test && cargo clippy -- -D warnings`
+1. **Run linters and tests**: `cargo clippy -- -D warnings && cargo fmt -- --check && cargo test`
 2. **Commit** with a descriptive message
 3. **Push** to the remote branch
 
@@ -68,7 +68,7 @@ relevant.
 
 1. **One comment at a time** - Don't batch process
 2. **Propose before acting** - Always get approval
-3. **Test before commit** - Run tests after all changes
+3. **Lint and test before commit** - Run linters then tests after all changes
 4. **Validate before posting** - Let user approve each reply
 5. **Learn from feedback** - Update rules to prevent future similar comments
 

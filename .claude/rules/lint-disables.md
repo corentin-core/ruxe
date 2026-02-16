@@ -12,8 +12,13 @@ When you encounter a clippy warning:
 
 1. **Understand** why it triggers
 2. **Fix** the underlying issue if possible
-3. **If an allow is truly needed**, explain the tradeoff and ask for approval
+3. **If a fix is not possible**, STOP and ask the user:
+   - Explain the warning and why it triggers
+   - Explain the tradeoff of suppressing it
+   - **Wait for explicit approval before adding any `#[allow(...)]`**
 4. **Scope narrowly** - prefer `#[allow(...)]` on the specific item, not module-wide
+
+**NEVER add a lint suppression without stopping to ask.** This is a hard checkpoint.
 
 ```rust
 // BAD - silently suppressing
