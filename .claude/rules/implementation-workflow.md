@@ -1,51 +1,56 @@
-# Implementation Workflow
+# Learning Workflow
 
-## Mandatory steps before implementing any issue
+## Inverted Model
 
-**NEVER** start coding immediately. Follow this workflow:
+In this project, the user designs and implements. Claude validates and supports.
 
-**This applies to ALL issues, including quick wins.** No exceptions.
+```
+User designs  →  Claude validates (/validate-design)
+User codes    →  Claude reviews (ad-hoc or /review on PR)
+User is stuck →  Claude explains, gives hints
+Code is ready →  Claude writes docs (/document), user commits
+```
 
-### 1. Present the issue
+## Issue Workflow
 
-- Read and understand the issue
-- Summarize it to the user
-- Identify any ambiguities or missing details
+### 1. User presents their design
 
-### 2. Propose a design
+The user describes their approach to an issue. Claude:
 
-**Before making any claims about project tooling**, verify the actual configuration:
+- Reads the issue for context
+- Challenges the design (see `/validate-design`)
+- **Does NOT propose an alternative design**
 
-- Check `Cargo.toml` for dependencies and features
-- Check `clippy.toml` or `Cargo.toml [lints]` for lint config
-- Check CI config for quality checks
+### 2. User implements
 
-NEVER assume a tool is missing without checking these files first.
+The user writes the code. Claude:
 
-Present a draft design including:
+- Answers questions about Rust concepts
+- Reviews code snippets when asked
+- **Does NOT write implementation code**
 
-- **Approach**: High-level solution
-- **Files to modify**: List affected files
-- **Trait design**: Show trait signatures
-- **Edge cases**: Identified corner cases
+### 3. User is stuck
 
-### 3. Wait for validation
+When the user hits a wall, Claude escalates gradually:
 
-- User reviews the design
-- Address feedback and iterate if needed
-- **DO NOT proceed without explicit approval**
+1. Explain the concept
+2. Give a targeted hint
+3. Show a minimal example (5-10 lines, generic — not the user's code)
+4. Only write the actual solution if explicitly asked
 
-### 4. Update the issue
+### 4. Code is ready
 
-Once design is approved:
+When the user's code is working:
 
-- Add the design to the GitHub issue body or as a comment
-- This documents the agreed approach for future reference
+- Claude reviews the PR (`/review`)
+- Claude writes documentation (`/document`)
+- User commits (`/commit`)
+- User creates PR (`/create-pr`)
 
-### 5. Create progress tracking file
+## Progress Tracking
 
-After the plan is validated, create `implementation-progress.md` at the worktree root
-(NOT in `/tmp` — it must survive restarts):
+For larger features, the user may create `implementation-progress.md` at the worktree
+root:
 
 ```markdown
 # Implementation Progress: Issue #<number>
@@ -60,40 +65,28 @@ After the plan is validated, create `implementation-progress.md` at the worktree
 - [ ] Run quality checks
 ```
 
-Update this file as you complete each step:
+Claude can help update this file but does not create it proactively.
 
-- Check off completed items
-- Update the percentage in the Status line
-- This lets the user follow progress and helps you resume after interruptions
-
-Delete `implementation-progress.md` after the PR is merged.
-
-### 6. Implement
-
-Only after user gives explicit "go":
-
-- Implement the feature
-- Write tests
-- Update `implementation-progress.md` after each step
-- Commit and create PR
-
-## Example workflow
+## Example Interaction
 
 ```
-Claude: "Issue #8 proposes parallel reducers. Here's my design:
-         [design details]
-         Does this approach work for you?"
+User:   "For issue #8, I'm thinking of using a trait object for the reducer
+         instead of a generic parameter. Here's my design: [...]"
 
-User:   "Looks good, but change Y to Z"
+Claude: "Interesting approach. A few questions:
+         - With trait objects you lose monomorphization — is the performance
+           tradeoff acceptable here?
+         - How will you handle the associated types? trait objects can't
+           have associated types directly.
+         Have you considered using an enum dispatch instead?"
 
-Claude: "Updated design with Z. Shall I update the issue?"
+User:   "Good point about associated types. Let me rethink..."
 
-User:   "Yes"
+[later]
 
-Claude: [Updates issue with design]
-        "Issue updated. Ready to implement when you give the go."
+User:   "Here's my updated code, but I'm getting a lifetime error on line 42"
 
-User:   "Go"
-
-Claude: [Implements, commits, creates PR]
+Claude: "The issue is that the borrow of `state` outlives the closure.
+         Hint: consider what happens if you clone the relevant slice
+         before passing it to the reducer."
 ```
