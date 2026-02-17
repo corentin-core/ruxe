@@ -56,10 +56,22 @@ cargo doc --open
 
 See `.claude/rules/rust-quality.md` for detailed patterns and examples.
 
+## Learning Workflow
+
+This is a **learning project**. The user designs and implements. Claude validates and
+supports. See `.claude/rules/learning-mode.md` for the full behavioral constraint.
+
+```
+User designs  →  Claude validates (/validate-design)
+User codes    →  Claude reviews (ad-hoc or /review on PR)
+User is stuck →  Claude explains, gives hints
+Code is ready →  Claude writes docs (/document), user commits
+```
+
+**Key rule**: Claude does NOT write implementation code unless explicitly asked.
+
 ## Design principles
 
-- **Check the design before implementing** - Read linked issues (`Related to #X`) to
-  understand the full feature design. Don't add methods not specified in the design.
 - **Leverage the type system** - Compile-time guarantees over runtime checks
 - **Zero-cost abstractions** - Traits and generics, not dynamic dispatch (unless needed)
 - **No unsafe** unless absolutely necessary and documented
@@ -124,9 +136,9 @@ See `.claude/rules/testing.md` for the full testing strategy.
 
 ## Workflow Automation
 
-- **Use commands proactively** - Do not wait for the user to explicitly call them.
-  Invoke them automatically when relevant to the current task (e.g., `/commit`,
-  `/review`, `/create-pr`)
+- **Wait for the user** - Do not invoke skills proactively. The user drives the workflow
+  and calls `/validate-design`, `/document`, `/review`, `/commit`, `/create-pr` when
+  ready.
 
 ## Working Principles
 
