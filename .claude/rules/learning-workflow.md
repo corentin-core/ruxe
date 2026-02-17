@@ -13,6 +13,15 @@ Code is ready →  Claude writes docs (/document), user commits
 
 ## Issue Workflow
 
+### 0. Feynman checkpoint
+
+Before coding, the user explains the key Rust concepts for this issue in their own
+words. Claude challenges the understanding — not the code.
+
+Example: before #4 (SliceReducer), the user explains what associated types are and why
+they're better than a generic parameter here. Claude validates or corrects before the
+user starts implementing.
+
 ### 1. User presents their design
 
 The user describes their approach to an issue. Claude:
@@ -46,6 +55,16 @@ When the user's code is working:
 - Claude writes documentation (`/document`)
 - User commits (`/commit`)
 - User creates PR (`/create-pr`)
+
+### 5. Learning log
+
+After the PR is merged, the user writes a short entry in `LEARNING_LOG.md`:
+
+- What blocked me
+- What clicked
+- What I'd do differently
+
+Claude can prompt the user to fill it in but doesn't write it for them.
 
 ## Example Interaction
 
