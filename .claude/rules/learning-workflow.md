@@ -47,26 +47,6 @@ When the user's code is working:
 - User commits (`/commit`)
 - User creates PR (`/create-pr`)
 
-## Progress Tracking
-
-For larger features, the user may create `implementation-progress.md` at the worktree
-root:
-
-```markdown
-# Implementation Progress: Issue #<number>
-
-## Status: In Progress (0%)
-
-## Plan
-
-- [ ] `src/file1.rs` - Description
-- [ ] `src/file2.rs` - Description
-- [ ] `tests/test_file.rs` - Tests
-- [ ] Run quality checks
-```
-
-Claude can help update this file but does not create it proactively.
-
 ## Example Interaction
 
 ```
