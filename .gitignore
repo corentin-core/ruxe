@@ -1,5 +1,21 @@
 /target
 Cargo.lock
-.claude/
-CLAUDE.md
 .idea/
+
+# Claude config: track ruxe-specific, ignore shared symlinks
+.claude/settings.json
+.claude/commands/
+.claude/rules/auto-introspection.md
+.claude/rules/design-mockups.md
+.claude/rules/documentation.md
+.claude/rules/git-conventions.md
+.claude/rules/implementation-workflow.md
+.claude/rules/imports.md
+.claude/rules/lint-disables.md
+.claude/rules/pr-review.md
+.claude/rules/python-quality.md
+.claude/rules/quality-docs.md
+.claude/skills/create-pr
+.claude/skills/implement
+.claude/skills/orchestrate
+.claude/skills/refactor-check
