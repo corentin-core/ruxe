@@ -19,3 +19,4 @@ Cargo.lock
 .claude/skills/implement
 .claude/skills/orchestrate
 .claude/skills/refactor-check
+.claude/
