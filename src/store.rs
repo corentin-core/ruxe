@@ -45,7 +45,7 @@ impl<S, R: Reducer<S, Event = E>, E> Store<S, R, E> {
     /// in FIFO order. Returns an error if the re-dispatch depth exceeds
     /// `max_depth`.
     pub fn dispatch(&mut self, event: R::Event) -> Result<(), DispatchError> {
-        let output = self.reducer.reduce(&self.state, event);
+        let output = self.reducer.reduce(&self.state, &event);
         self.apply_output(output, 0)?;
 
         while let Some(pending) = self.queue.pop_front() {
@@ -88,7 +88,7 @@ impl<S, R: Reducer<S, Event = E>, E> Store<S, R, E> {
         pending_event: PendingEvent<R::Event>,
     ) -> Result<(), DispatchError> {
         let event = pending_event.event;
-        let output = self.reducer.reduce(&self.state, event);
+        let output = self.reducer.reduce(&self.state, &event);
         self.apply_output(output, pending_event.depth)
     }
 }
@@ -125,19 +125,19 @@ mod tests {
         fn reduce(
             &self,
             state: &SimpleState,
-            event: Self::Event,
+            event: &Self::Event,
         ) -> ReducerOutput<SimpleState, Event> {
             match event {
                 FirstValueUpdate { value } => ReducerOutput {
                     state: SimpleState {
-                        first_value: value,
+                        first_value: *value,
                         ..*state
                     },
                     side_events: None,
                 },
                 SecondValueUpdate { value } => ReducerOutput {
                     state: SimpleState {
-                        second_value: value,
+                        second_value: *value,
                         ..*state
                     },
                     side_events: None,

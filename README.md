@@ -14,9 +14,11 @@ data-race-free parallel reducers at compile time.
 
 ```
 Store<S, R>            Generic state container
-Reducer<S>             Trait with associated Event type
-  ├── SliceReducer     Operates on a single state slice (planned)
-  └── RootReducer      Combines slice reducers (planned)
+Reducer<S>             Trait with associated Event type — operates on full state
+SliceReducer           Trait with associated Slice + Event — operates on a state slice
+HasSlice<T>            Bridges a slice to the global state (user-implemented)
+ReducerOutput<S, E>    Return type: new state + optional side events
+RootReducer            Combines slice reducers (planned)
 Middleware             Pre/post dispatch hooks (planned)
 ParallelRootReducer    Rayon-based parallel execution (planned)
 ```
@@ -26,7 +28,22 @@ ParallelRootReducer    Rayon-based parallel execution (planned)
 ```rust
 pub trait Reducer<S> {
     type Event;
-    fn reduce(&self, state: &S, event: Self::Event) -> S;
+    fn reduce(&self, state: &S, event: &Self::Event) -> ReducerOutput<S, Self::Event>;
+}
+
+pub trait SliceReducer {
+    type Event;
+    type Slice;
+    fn reduce(
+        &self,
+        slice: &Self::Slice,
+        event: &Self::Event,
+    ) -> ReducerOutput<Self::Slice, Self::Event>;
+}
+
+pub trait HasSlice<T> {
+    fn slice(&self) -> &T;
+    fn set_slice(self, slice: T) -> Self;
 }
 
 pub struct Store<S, R> { /* ... */ }
@@ -49,8 +66,8 @@ by external signals (sensor readings, price updates, timer ticks), not user inte
 | Phase   | Feature                            | Status  |
 |---------|------------------------------------|---------|
 | 1 — MVP | [Store, Event, Reducer][i2]        | done    |
-| 1       | [ReducerOutput][i3]                | planned |
-| 1       | [SliceReducer][i4]                 | planned |
+| 1       | [ReducerOutput][i3]                | done    |
+| 1       | [SliceReducer][i4]                 | done    |
 | 1       | [Sequential RootReducer][i5]       | planned |
 | 1       | [Middleware][i6]                    | planned |
 | 1       | [Documentation & EMS example][i7]  | planned |
