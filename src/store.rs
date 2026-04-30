@@ -97,8 +97,8 @@ impl<S, R: Reducer<S, Event = E>, E> Store<S, R, E> {
 mod tests {
     use crate::reducer::{Reducer, ReducerOutput};
     use crate::store::tests::Event::{
-        FirstValueUpdate, IgnoredUpdate, MaximumDepthExceededEvent, MultipleDepthSideEvent,
-        SecondValueUpdate, SideEvent,
+        EmitNestedSide, EmitSelfRecursive, EmitSide, FirstValueUpdate, IgnoredUpdate,
+        SecondValueUpdate,
     };
     use crate::store::{DispatchError, Store};
 
@@ -106,9 +106,9 @@ mod tests {
         FirstValueUpdate { value: f64 },
         SecondValueUpdate { value: u32 },
         IgnoredUpdate {},
-        SideEvent {},
-        MultipleDepthSideEvent {},
-        MaximumDepthExceededEvent {},
+        EmitSide {},
+        EmitNestedSide {},
+        EmitSelfRecursive {},
     }
 
     #[derive(Clone, Debug, PartialEq)]
@@ -142,17 +142,17 @@ mod tests {
                     },
                     side_events: None,
                 },
-                SideEvent {} => ReducerOutput {
+                EmitSide {} => ReducerOutput {
                     state: state.clone(),
                     side_events: Some(vec![SecondValueUpdate { value: 2 }, IgnoredUpdate {}]),
                 },
-                MultipleDepthSideEvent {} => ReducerOutput {
+                EmitNestedSide {} => ReducerOutput {
                     state: state.clone(),
-                    side_events: Some(vec![SideEvent {}, FirstValueUpdate { value: 2.0 }]),
+                    side_events: Some(vec![EmitSide {}, FirstValueUpdate { value: 2.0 }]),
                 },
-                MaximumDepthExceededEvent {} => ReducerOutput {
+                EmitSelfRecursive {} => ReducerOutput {
                     state: state.clone(),
-                    side_events: Some(vec![MaximumDepthExceededEvent {}]),
+                    side_events: Some(vec![EmitSelfRecursive {}]),
                 },
                 _ => ReducerOutput {
                     state: state.clone(),
@@ -243,7 +243,7 @@ mod tests {
         let mut store = make_store();
         let state = make_state();
 
-        store.dispatch(SideEvent {}).expect("Should not panic");
+        store.dispatch(EmitSide {}).expect("Should not panic");
         assert_eq!(
             *store.state(),
             SimpleState {
@@ -257,9 +257,7 @@ mod tests {
     fn multiple_side_event_dispatch() {
         let mut store = make_store();
 
-        store
-            .dispatch(MultipleDepthSideEvent {})
-            .expect("Should not panic");
+        store.dispatch(EmitNestedSide {}).expect("Should not panic");
         assert_eq!(
             *store.state(),
             SimpleState {
@@ -274,7 +272,7 @@ mod tests {
         let mut store = make_store();
 
         let err = store
-            .dispatch(MaximumDepthExceededEvent {})
+            .dispatch(EmitSelfRecursive {})
             .expect_err("Should return an error");
         assert_eq!(err, DispatchError::MaxDepthExceeded { depth: 10, max: 10 });
     }
