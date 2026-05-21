@@ -1,3 +1,8 @@
+//! Reducer traits: pure transformations from `(state, event)` to new state.
+//!
+//! [`Reducer`] operates on the full state. [`SliceReducer`] operates on an
+//! isolated slice and composes with peers via tuple syntax (up to arity 12).
+
 use crate::HasSlice;
 
 /// The output of a reducer.
@@ -8,34 +13,29 @@ pub struct ReducerOutput<S, E> {
     pub side_events: Option<Vec<E>>,
 }
 
-/// A reducer takes the current state and an event, and returns a [`ReducerOutput`]
-/// containing the new state and optionally side events to re-dispatch.
+/// A pure transformation: `(state, event)` → new state + optional side events.
 ///
-/// The reducer does not modify the state in place — it produces a new value
-/// that the [`crate::Store`] will use to replace the current state.
+/// The [`crate::Store`] replaces its state with the returned value; the
+/// input `&S` is not modified.
 pub trait Reducer<S> {
     /// The event type this reducer handles.
     type Event;
 
-    /// Computes a new state and optional side events from the current state and an event.
+    /// Computes the new state. Must be pure: no I/O, no mutation.
     fn reduce(&self, state: &S, event: &Self::Event) -> ReducerOutput<S, Self::Event>;
 }
 
-/// A reducer takes a slice of the current state and an event, and returns a [`ReducerOutput`]
-/// containing the new state slice and optionally side events to re-dispatch.
+/// Like [`Reducer`], but operates on a slice of the global state.
 ///
-/// The reducer does not modify the state slice in place — it produces a new value
-/// that the [`crate::Store`] will use to replace the current state slice.
-///
-/// Slice reducers are structurally isolated: the `reduce` method only receives
-/// `&Self::Slice`, making access to other slices impossible by construction.
+/// The `reduce` method receives `&Self::Slice` only, making access to other
+/// slices impossible by construction.
 pub trait SliceReducer {
     /// The event type this reducer handles.
     type Event;
     /// The slice of global state this reducer operates on.
     type Slice;
 
-    /// Computes a new state slice and optional side events from the current state and an event.
+    /// Computes the new slice. Must be pure: no I/O, no mutation.
     fn reduce(
         &self,
         slice: &Self::Slice,
@@ -43,17 +43,12 @@ pub trait SliceReducer {
     ) -> ReducerOutput<Self::Slice, Self::Event>;
 }
 
-/// Generates a `Reducer<S>` implementation for a tuple of [`SliceReducer`].
+/// Generates `Reducer<S>` for a tuple of [`SliceReducer`], invoked per arity.
 ///
-/// Invoked once per arity (1 through 12).
-///
-/// # Bounds generated
-///
-/// - `S: Clone` — the macro clones `&S` once at the start of `reduce` to chain
-///   `set_slice` calls
-/// - `Ri: SliceReducer<Event = E>` — all reducers in the tuple must share the
-///   same `Event` type
-/// - `S: HasSlice<Ri::Slice>` — required for each `Ri` to extract its slice
+/// Bounds generated:
+/// - `S: Clone` — `&S` is cloned once to chain `set_slice` calls
+/// - `Ri: SliceReducer<Event = E>` — shared `Event` type across the tuple
+/// - `S: HasSlice<Ri::Slice>` — required per `Ri` to extract its slice
 macro_rules! impl_slice_reducer_tuple {
     ($($idx:tt $t:ident),+) => {
         impl<S, E, $($t,)+> Reducer<S> for ($($t,)+)
