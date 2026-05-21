@@ -83,6 +83,52 @@ pub fn dispatch(&mut self, event: Event) -> Result<&State, DispatchError> {
 
 Use the type system to prevent invalid states at compile time.
 
+## Closure captures and mutability
+
+`move` closures take ownership of their captures, but **mutability of the source
+binding is preserved** — it doesn't get auto-promoted. If the closure body calls a
+captured `FnMut` or mutates a captured value, the source binding must be declared
+`mut`.
+
+```rust
+// BAD - compile error: cannot borrow `self.callback` as mutable
+fn wrap(
+    self: Box<Self>,
+    next: Box<dyn FnMut(&S, E) -> R>,
+) -> Box<dyn FnMut(&S, E) -> R> {
+    Box::new(move |state, event| {
+        (self.callback)(state);   // needs &mut self.callback
+        next(state, event)         // needs &mut next
+    })
+}
+
+// GOOD - `mut` on bindings enables mutable capture
+fn wrap(
+    mut self: Box<Self>,
+    mut next: Box<dyn FnMut(&S, E) -> R>,
+) -> Box<dyn FnMut(&S, E) -> R> {
+    Box::new(move |state, event| {
+        (self.callback)(state);
+        next(state, event)
+    })
+}
+```
+
+The `mut` on a function parameter is a **binding modifier**, not part of the
+signature contract — invisible to callers. Keep it when the closure body needs
+mutable access to a captured `FnMut`/`FnOnce` or mutates a captured field.
+
+Rule of thumb:
+
+| Capture kind | Called from move closure | `mut` on source binding? |
+| ------------ | ------------------------ | ------------------------ |
+| `Fn`         | Yes                      | No                       |
+| `FnMut`      | Yes                      | **Yes**                  |
+| `FnOnce`     | Yes (once)               | No (binding is consumed) |
+
+When reviewing a move closure, ask: *"does the body call a captured `FnMut`, or
+write to a captured field?"* If yes, every relevant source binding needs `mut`.
+
 ## Prefer generics over trait objects
 
 Use static dispatch (generics) by default. Only use dynamic dispatch (`dyn Trait`) when
@@ -131,3 +177,29 @@ Follow Rust naming conventions:
 | Modules     | `snake_case`  | `root_reducer`       |
 | Traits      | `PascalCase`  | `SliceReducer`       |
 | Type params | `PascalCase`  | `S`, `State`, `E`    |
+
+## Code review — diagnose before prescribing
+
+When reviewing code, identify the **smallest fix** that addresses the actual problem
+before proposing structural changes.
+
+A symptom (verbose paths, repeated boilerplate, awkward call sites) often has multiple
+possible fixes ordered by cost:
+
+1. **Local syntactic fix** — `use` import, type alias, `cargo fmt`
+2. **In-place rename** — better identifier, no structure change
+3. **Local refactor** — extract helper, group related items
+4. **Structural refactor** — split modules, change visibility, reorganize file layout
+
+Start at the top of the list and stop at the first fix that resolves the symptom.
+Proposing a structural refactor when a `use` statement suffices is **noise** — it
+overrides the author's design choices for no real benefit.
+
+Concrete example: long fully-qualified paths inside a nested module (e.g.
+`crate::store::tests::fixtures::SimpleState` everywhere) is a **`use` problem**, not
+a structural problem. The fix is `use super::super::fixtures::*;`, not flattening
+the module hierarchy.
+
+When in doubt, ask the author: *"is the encapsulation intentional, or just an
+artifact of the path verbosity?"* — the answer dictates whether to fix locally
+or restructure.

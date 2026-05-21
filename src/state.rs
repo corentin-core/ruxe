@@ -1,3 +1,6 @@
+//! State slice access. Required to compose [`crate::SliceReducer`] over a
+//! struct containing multiple slices.
+
 /// Gives access to a state slice for reading and update.
 pub trait HasSlice<T> {
     /// Returns a reference to the slice.
