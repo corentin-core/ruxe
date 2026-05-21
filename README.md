@@ -68,8 +68,8 @@ by external signals (sensor readings, price updates, timer ticks), not user inte
 | 1 — MVP | [Store, Event, Reducer][i2]        | done    |
 | 1       | [ReducerOutput][i3]                | done    |
 | 1       | [SliceReducer][i4]                 | done    |
-| 1       | [Sequential RootReducer][i5]       | planned |
-| 1       | [Middleware][i6]                    | planned |
+| 1       | [Sequential RootReducer][i5]       | done |
+| 1       | [Middleware][i6]                    | done |
 | 1       | [Documentation & EMS example][i7]  | planned |
 | 2       | [Parallel RootReducer (rayon)][i8] | planned |
 | 2       | [Benchmarks][i9]                   | planned |
