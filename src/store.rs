@@ -10,7 +10,12 @@ use std::collections::VecDeque;
 #[derive(Debug, PartialEq)]
 pub enum DispatchError {
     /// Side-event recursion exceeded `max_depth`.
-    MaxDepthExceeded { depth: usize, max: usize },
+    MaxDepthExceeded {
+        /// Depth at which the offending event was produced (0 = original dispatch).
+        depth: usize,
+        /// The configured `max_depth` limit passed to [`Store::new`].
+        max: usize,
+    },
 }
 
 struct PendingEvent<E> {
@@ -34,7 +39,7 @@ pub struct Store<S, E> {
 
 impl<S, E> Store<S, E> {
     /// Builds a store from an initial state, a reducer, and an ordered list
-    /// of middlewares (see [`crate::middleware`] for the composition order).
+    /// of middlewares (see [`Middleware`] for the composition order).
     ///
     /// `max_depth` bounds the side-event re-dispatch depth (original dispatch
     /// is depth 0). An event at depth `max_depth` may run but cannot emit
