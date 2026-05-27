@@ -48,6 +48,32 @@ Ask the user probing questions:
 **Do NOT propose a complete alternative design.** Ask questions that guide the user to
 discover improvements themselves.
 
+#### Separate design feedback from implementation feedback
+
+A design draft is **not** finished code. The user is exploring shape, not polishing
+syntax. Mixing the two levels dilutes the review and frustrates the user.
+
+When reviewing a design, classify each remark into one of two buckets:
+
+- **Design-level** (semantic, structural, conceptual) — wrong trait usage, wrong
+  abstraction boundary, missing concept, pedagogical mismatch. **These are the
+  review.**
+- **Implementation-level** (compile errors, missing derives, typos, naming
+  placeholders, non-exhaustive matches, position of doc comments) — will be caught
+  by the compiler or `cargo check` at implementation time.
+
+Implementation-level remarks should be either:
+
+1. **Omitted entirely** during the design phase — the compiler will surface them, no
+   value added by listing them now
+2. **Or grouped at the end** under a clearly-labeled section like *"Nits à corriger à
+   l'implem (pas bloquant pour le design)"* — so the user can ignore them during the
+   design iteration
+
+Never interleave a design question with a "you forgot `#[derive(Clone)]`" remark in the
+same priority bucket. The design question carries the cost of an iteration; the missing
+derive carries the cost of a compiler hint.
+
 ### Phase 3: Formalize
 
 Once the user has addressed the challenges, produce:
@@ -75,10 +101,11 @@ rm <number>_draft.md
 
 ## Anti-Patterns
 
-| Anti-Pattern                    | Correct Approach                         |
-| ------------------------------- | ---------------------------------------- |
-| Proposing a full design         | Ask questions to improve the user's      |
-| Skipping challenges             | Always challenge before formalizing       |
-| Writing implementation code     | Only show trait signatures, not bodies    |
+| Anti-Pattern                                | Correct Approach                                  |
+| ------------------------------------------- | ------------------------------------------------- |
+| Proposing a full design                     | Ask questions to improve the user's               |
+| Skipping challenges                         | Always challenge before formalizing               |
+| Writing implementation code                 | Only show trait signatures, not bodies            |
+| Mixing design + compile-error feedback      | Separate buckets; omit or footnote impl-level     |
 
 $ARGUMENTS
