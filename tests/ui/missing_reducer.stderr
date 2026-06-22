@@ -1,0 +1,51 @@
+error[E0277]: the trait bound `ruxe::HCons<FirstReducer, ruxe::HNil>: ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not satisfied
+  --> tests/ui/missing_reducer.rs:91:26
+   |
+91 |     let _ = root_reducer.reduce(&state, &event);
+   |                          ^^^^^^ the trait `ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not implemented for `ruxe::HCons<FirstReducer, ruxe::HNil>`
+   |
+help: `ruxe::HCons<HeadReducer, TailReducers>` implements trait `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, Index>`
+  --> src/parallel_root_reducer.rs
+   |
+   | / impl<HeadReducer, TailReducers, TargetSlice> FindReducerBySlice<TargetSlice, Here>
+   | |     for HCons<HeadReducer, TailReducers>
+   | | where
+   | |     HeadReducer: SliceReducer<Slice = TargetSlice>,
+   | |___________________________________________________^ `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::Here>`
+...
+   | / impl<HeadReducer, TailReducers, TargetSlice, TailIndex>
+   | |     FindReducerBySlice<TargetSlice, There<TailIndex>> for HCons<HeadReducer, TailReducers>
+   | | where
+   | |     TailReducers: FindReducerBySlice<TargetSlice, TailIndex>,
+   | |_____________________________________________________________^ `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::There<TailIndex>>`
+   = note: required for `ruxe::HCons<SecondSlice, ruxe::HNil>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<_, ruxe::HNil>>`
+   = note: 1 redundant requirement hidden
+   = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>`
+   = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HNil>, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>` to implement `Reducer<MyState>`
+
+error[E0277]: the trait bound `ruxe::HCons<FirstReducer, ruxe::HNil>: ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not satisfied
+  --> tests/ui/missing_reducer.rs:91:33
+   |
+91 |     let _ = root_reducer.reduce(&state, &event);
+   |                          ------ ^^^^^^ the trait `ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not implemented for `ruxe::HCons<FirstReducer, ruxe::HNil>`
+   |                          |
+   |                          required by a bound introduced by this call
+   |
+help: `ruxe::HCons<HeadReducer, TailReducers>` implements trait `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, Index>`
+  --> src/parallel_root_reducer.rs
+   |
+   | / impl<HeadReducer, TailReducers, TargetSlice> FindReducerBySlice<TargetSlice, Here>
+   | |     for HCons<HeadReducer, TailReducers>
+   | | where
+   | |     HeadReducer: SliceReducer<Slice = TargetSlice>,
+   | |___________________________________________________^ `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::Here>`
+...
+   | / impl<HeadReducer, TailReducers, TargetSlice, TailIndex>
+   | |     FindReducerBySlice<TargetSlice, There<TailIndex>> for HCons<HeadReducer, TailReducers>
+   | | where
+   | |     TailReducers: FindReducerBySlice<TargetSlice, TailIndex>,
+   | |_____________________________________________________________^ `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::There<TailIndex>>`
+   = note: required for `ruxe::HCons<SecondSlice, ruxe::HNil>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<_, ruxe::HNil>>`
+   = note: 1 redundant requirement hidden
+   = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>`
+   = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HNil>, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>` to implement `Reducer<MyState>`
