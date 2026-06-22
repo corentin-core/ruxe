@@ -6,6 +6,13 @@
 //! The compiler infers them automatically during trait resolution — they
 //! are never written by the user, but appear in the concrete types of
 //! values like `ParallelRootReducer<L, E, Indices>`.
+//!
+//! # Attribution
+//!
+//! The `Here`/`There<I>` pattern is the same disambiguation trick used by
+//! [`frunk`](https://crates.io/crates/frunk)'s `Selector`/`Plucker` traits;
+//! reimplemented here for the same reason as the HList types — to avoid a
+//! transitive dependency for an internal detail.
 
 use std::marker::PhantomData;
 

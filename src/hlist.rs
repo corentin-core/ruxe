@@ -7,6 +7,13 @@
 //! forced-public only because the `HList!` macro expands to them in user
 //! code (e.g. `type Slices = HList!(A, B)` becomes `HCons<A, HCons<B, HNil>>`
 //! in the user's scope). They are not part of the stable user-facing API.
+//!
+//! # Attribution
+//!
+//! The `HCons`/`HNil` pair and the `hlist!`/`HList!` macros mirror the
+//! design of [`frunk`](https://crates.io/crates/frunk), the canonical HList
+//! crate in the Rust ecosystem. ruxe reimplements the minimal subset it
+//! needs in-tree to avoid a transitive dependency for an internal detail.
 
 #[doc(hidden)]
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
