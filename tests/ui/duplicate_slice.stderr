@@ -1,0 +1,57 @@
+error[E0284]: type annotations needed for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>`
+   --> tests/ui/duplicate_slice.rs:103:9
+    |
+103 |     let root_reducer = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
+    |         ^^^^^^^^^^^^
+104 |     let _ = root_reducer.reduce(&state, &event);
+    |                          ------ type must be known at this point
+    |
+    = note: cannot satisfy `<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>> as ruxe::parallel_root_reducer::FindReducerBySlice<FirstSlice, _>>::Reducer == _`
+    = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyState, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>`
+    = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>` to implement `Reducer<MyState>`
+help: consider giving `root_reducer` an explicit type, where the type for type parameter `Index` is specified
+    |
+103 |     let root_reducer: ParallelRootReducer<_, _, ruxe::HCons<Index, _>> = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
+    |                     ++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0283]: type annotations needed for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>`
+   --> tests/ui/duplicate_slice.rs:103:9
+    |
+103 |     let root_reducer = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
+    |         ^^^^^^^^^^^^
+104 |     let _ = root_reducer.reduce(&state, &event);
+    |                          ------ type must be known at this point
+    |
+    = note: multiple `impl`s satisfying `ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>: ruxe::parallel_root_reducer::FindReducerBySlice<FirstSlice, _>` found in the `ruxe` crate:
+            - impl<HeadReducer, TailReducers, TargetSlice, TailIndex> ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::There<TailIndex>> for ruxe::HCons<HeadReducer, TailReducers>
+              where TailReducers: ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, TailIndex>;
+            - impl<HeadReducer, TailReducers, TargetSlice> ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::Here> for ruxe::HCons<HeadReducer, TailReducers>
+              where <HeadReducer as SliceReducer>::Slice == TargetSlice, HeadReducer: SliceReducer;
+    = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyState, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>`
+    = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>` to implement `Reducer<MyState>`
+help: consider giving `root_reducer` an explicit type, where the type for type parameter `Index` is specified
+    |
+103 |     let root_reducer: ParallelRootReducer<_, _, ruxe::HCons<Index, _>> = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
+    |                     ++++++++++++++++++++++++++++++++++++++++++++++++++
+
+error[E0283]: type annotations needed for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>`
+   --> tests/ui/duplicate_slice.rs:103:9
+    |
+103 |     let root_reducer = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
+    |         ^^^^^^^^^^^^
+104 |     let _ = root_reducer.reduce(&state, &event);
+    |                          ------ ------ type must be known at this point
+    |                          |
+    |                          required by a bound introduced by this call
+    |
+    = note: multiple `impl`s satisfying `ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>: ruxe::parallel_root_reducer::FindReducerBySlice<FirstSlice, _>` found in the `ruxe` crate:
+            - impl<HeadReducer, TailReducers, TargetSlice, TailIndex> ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::There<TailIndex>> for ruxe::HCons<HeadReducer, TailReducers>
+              where TailReducers: ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, TailIndex>;
+            - impl<HeadReducer, TailReducers, TargetSlice> ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::Here> for ruxe::HCons<HeadReducer, TailReducers>
+              where <HeadReducer as SliceReducer>::Slice == TargetSlice, HeadReducer: SliceReducer;
+    = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyState, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>`
+    = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HCons<FirstReducer, ruxe::HCons<SecondReducer, ruxe::HNil>>>, MyEvent, ruxe::HCons<_, ruxe::HCons<ruxe::There<ruxe::There<ruxe::Here>>, ruxe::HNil>>>` to implement `Reducer<MyState>`
+help: consider giving `root_reducer` an explicit type, where the type for type parameter `Index` is specified
+    |
+103 |     let root_reducer: ParallelRootReducer<_, _, ruxe::HCons<Index, _>> = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
+    |                     ++++++++++++++++++++++++++++++++++++++++++++++++++

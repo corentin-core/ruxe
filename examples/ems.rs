@@ -1,4 +1,4 @@
-//! A sequential Energy Management System (EMS) built on ruxe.
+//! An Energy Management System (EMS) built on ruxe — sequential vs parallel.
 //!
 //! An EMS supervises a power installation. This example models a small plant
 //! with three independent subsystems, each held as a state slice:
@@ -13,14 +13,24 @@
 //! ## What it demonstrates
 //!
 //! - A `PlantState` composed of 3 isolated slices, each with its own
-//!   [`SliceReducer`], combined into a root reducer via tuple syntax
+//!   [`SliceReducer`], wrapped in either [`SequentialRootReducer`] or
+//!   [`ParallelRootReducer`]
 //! - Typed events (an `enum`) rather than stringly-typed actions
 //! - Two middlewares: a logger that traces every event and state, and a
 //!   battery controller that reacts to a fact by issuing a command
 //! - Side events emitted from **both** a reducer and a middleware, then
 //!   re-dispatched by the store
+//! - A side-by-side timing comparison showing parallel execution speedup
 //!
-//! ## Scenario
+//! ## Simulated work
+//!
+//! Each slice reducer calls `std::thread::sleep` for 50ms to simulate
+//! non-trivial work (e.g. heavy calculation, IO). In production a real
+//! reducer would do CPU-bound work; sleep is used here purely to make
+//! the wall-clock difference between sequential and parallel observable
+//! without writing a contrived computation.
+//!
+//! ## Scenario (run twice — once per root-reducer variant)
 //!
 //! Three telemetry events are dispatched (solar, battery, power-meter updates).
 //! The battery update drops the SOC to 10%: the battery reducer detects the
@@ -29,34 +39,18 @@
 //! zeroes the battery's output — showing reducers and middlewares cooperating
 //! through the event queue without ever touching each other's slice.
 //!
-//! Run with: `cargo run --example ems_sequential`
-//!
-//! Expected output:
-//! ```text
-//! EMS Sequential Example
-//! Event received: SolarUpdate: 100.0W, 50.0VAR, 240.0V
-//! Current state: Solar: 0.0W, 0.0VAR, 0.0V, Battery: 100.0%, 0.0W, 0.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! New state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 100.0%, 0.0W, 0.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! Event received: BatteryUpdate: 10.0%, 50.0W, 25.0VAR
-//! Current state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 100.0%, 0.0W, 0.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! New state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 50.0W, 25.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! Event received: BatteryStateOfChargeLow
-//! Current state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 50.0W, 25.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! Battery state of charge is low. Activating battery control.
-//! Issuing command: BatteryCommand: 0.0W, 0.0VAR to reduce battery output.
-//! New state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 50.0W, 25.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! Event received: BatteryCommand: 0.0W, 0.0VAR
-//! Current state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 50.0W, 25.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! New state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 0.0W, 0.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! Event received: PowerMeterUpdate: 150.0W, 75.0VAR, 240.0V
-//! Current state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 0.0W, 0.0VAR, Power Meter: 0.0W, 0.0VAR, 0.0V
-//! New state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 0.0W, 0.0VAR, Power Meter: 150.0W, 75.0VAR, 240.0V
-//! Final state: Solar: 100.0W, 50.0VAR, 240.0V, Battery: 10.0%, 0.0W, 0.0VAR, Power Meter: 150.0W, 75.0VAR, 240.0V
-//! ```
+//! Run with: `cargo run --example ems`
 
 use std::fmt::Display;
+use std::thread;
+use std::time::{Duration, Instant};
 
-use ruxe::{HasSlice, Middleware, Next, Reducer, ReducerOutput, SliceReducer, Store};
+use ruxe::{
+    HasSlice, Middleware, Next, ParallelRootReducer, Reducer, ReducerOutput, SequentialRootReducer,
+    SliceReducer, StateSlices, Store,
+};
+
+const REDUCER_WORK_SIMULATION: Duration = Duration::from_millis(50);
 
 #[derive(Clone)]
 struct SolarState {
@@ -159,6 +153,10 @@ impl HasSlice<PowerMeterState> for PlantState {
     }
 }
 
+impl StateSlices for PlantState {
+    type Slices = ruxe::HList!(SolarState, BatteryState, PowerMeterState);
+}
+
 #[derive(Clone)]
 enum Event {
     SolarUpdate {
@@ -176,9 +174,7 @@ enum Event {
         reactive_power: f64,
         voltage: f64,
     },
-    // Triggered when the battery state of charge falls below a certain threshold
     BatteryStateOfChargeLow,
-    // Command to control the battery, e.g., to reduce active power output
     BatteryCommand {
         active_power: f64,
         reactive_power: f64,
@@ -192,46 +188,38 @@ impl Display for Event {
                 active_power,
                 reactive_power,
                 voltage,
-            } => {
-                write!(
-                    f,
-                    "SolarUpdate: {:.1}W, {:.1}VAR, {:.1}V",
-                    active_power, reactive_power, voltage
-                )
-            }
+            } => write!(
+                f,
+                "SolarUpdate: {:.1}W, {:.1}VAR, {:.1}V",
+                active_power, reactive_power, voltage
+            ),
             Event::BatteryUpdate {
                 state_of_charge,
                 active_power,
                 reactive_power,
-            } => {
-                write!(
-                    f,
-                    "BatteryUpdate: {:.1}%, {:.1}W, {:.1}VAR",
-                    state_of_charge, active_power, reactive_power
-                )
-            }
+            } => write!(
+                f,
+                "BatteryUpdate: {:.1}%, {:.1}W, {:.1}VAR",
+                state_of_charge, active_power, reactive_power
+            ),
             Event::PowerMeterUpdate {
                 active_power,
                 reactive_power,
                 voltage,
-            } => {
-                write!(
-                    f,
-                    "PowerMeterUpdate: {:.1}W, {:.1}VAR, {:.1}V",
-                    active_power, reactive_power, voltage
-                )
-            }
+            } => write!(
+                f,
+                "PowerMeterUpdate: {:.1}W, {:.1}VAR, {:.1}V",
+                active_power, reactive_power, voltage
+            ),
             Event::BatteryStateOfChargeLow => write!(f, "BatteryStateOfChargeLow"),
             Event::BatteryCommand {
                 active_power,
                 reactive_power,
-            } => {
-                write!(
-                    f,
-                    "BatteryCommand: {:.1}W, {:.1}VAR",
-                    active_power, reactive_power
-                )
-            }
+            } => write!(
+                f,
+                "BatteryCommand: {:.1}W, {:.1}VAR",
+                active_power, reactive_power
+            ),
         }
     }
 }
@@ -244,7 +232,7 @@ impl Middleware<PlantState, Event> for LoggingMiddleware {
             println!("Event received: {}", event);
             println!("Current state: {}", state);
             let side_events = next(state, event);
-            println!("New state: {}", state);
+            println!("New state:     {}", state);
             side_events
         })
     }
@@ -283,6 +271,7 @@ impl SliceReducer for SolarReducer {
         state: &SolarState,
         event: &Self::Event,
     ) -> ReducerOutput<SolarState, Self::Event> {
+        thread::sleep(REDUCER_WORK_SIMULATION);
         match event {
             Event::SolarUpdate {
                 active_power,
@@ -315,6 +304,7 @@ impl SliceReducer for BatteryReducer {
         state: &BatteryState,
         event: &Self::Event,
     ) -> ReducerOutput<BatteryState, Self::Event> {
+        thread::sleep(REDUCER_WORK_SIMULATION);
         match event {
             Event::BatteryUpdate {
                 state_of_charge,
@@ -360,11 +350,13 @@ struct PowerMeterReducer;
 impl SliceReducer for PowerMeterReducer {
     type Event = Event;
     type Slice = PowerMeterState;
+
     fn reduce(
         &self,
         state: &PowerMeterState,
         event: &Self::Event,
     ) -> ReducerOutput<PowerMeterState, Self::Event> {
+        thread::sleep(REDUCER_WORK_SIMULATION);
         match event {
             Event::PowerMeterUpdate {
                 active_power,
@@ -386,14 +378,8 @@ impl SliceReducer for PowerMeterReducer {
     }
 }
 
-fn make_root_reducer() -> impl Reducer<PlantState, Event = Event> {
-    (SolarReducer, BatteryReducer, PowerMeterReducer)
-}
-
-fn main() {
-    println!("EMS Sequential Example");
-
-    let initial_state = PlantState {
+fn initial_state() -> PlantState {
+    PlantState {
         solar: SolarState {
             active_power: 0.0,
             reactive_power: 0.0,
@@ -409,13 +395,20 @@ fn main() {
             reactive_power: 0.0,
             voltage: 0.0,
         },
-    };
-    let root_reducer = make_root_reducer();
-    let middlewares: Vec<Box<dyn Middleware<PlantState, Event>>> = vec![
+    }
+}
+
+fn middlewares() -> Vec<Box<dyn Middleware<PlantState, Event>>> {
+    vec![
         Box::new(LoggingMiddleware),
         Box::new(BatteryControlMiddleware),
-    ];
-    let mut store = Store::new(initial_state, root_reducer, middlewares, 10);
+    ]
+}
+
+fn run_scenario(root_reducer: impl Reducer<PlantState, Event = Event> + 'static) -> Duration {
+    let mut store = Store::new(initial_state(), root_reducer, middlewares(), 10);
+
+    let start = Instant::now();
 
     store
         .dispatch(Event::SolarUpdate {
@@ -439,5 +432,33 @@ fn main() {
         })
         .expect("dispatch failed");
 
+    let duration = start.elapsed();
+
     println!("Final state: {}", store.state());
+
+    duration
+}
+
+fn main() {
+    println!("=== EMS Example — Sequential ===\n");
+    let sequential_duration = run_scenario(SequentialRootReducer::new((
+        SolarReducer,
+        BatteryReducer,
+        PowerMeterReducer,
+    )));
+
+    println!("\n=== EMS Example — Parallel ===\n");
+    let parallel_duration = run_scenario(ParallelRootReducer::new((
+        SolarReducer,
+        BatteryReducer,
+        PowerMeterReducer,
+    )));
+
+    println!("\n=== Timing comparison ===");
+    println!("Sequential: {:?}", sequential_duration);
+    println!("Parallel:   {:?}", parallel_duration);
+    println!(
+        "Speedup:    {:.2}x",
+        sequential_duration.as_secs_f64() / parallel_duration.as_secs_f64()
+    );
 }
