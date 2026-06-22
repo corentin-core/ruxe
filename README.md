@@ -53,15 +53,11 @@ fn main() {
 }
 ```
 
-For a realistic multi-slice setup with middlewares, side events, and a side-by-side
-sequential-vs-parallel comparison, see [`examples/ems.rs`](examples/ems.rs) — a mini
-Energy Management System composing three independent state slices (solar, battery,
-grid meter).
+For a realistic multi-slice setup with middlewares, side events, and a side-by-side sequential-vs-parallel comparison, see [`examples/ems.rs`](examples/ems.rs) — a mini Energy Management System composing three independent state slices (solar, battery, grid meter).
 
 ## Root reducers — sequential and parallel
 
-When your state is composed of multiple independent slices, define one
-[`SliceReducer`] per slice, then combine them with one of two root reducers:
+When your state is composed of multiple independent slices, define one [`SliceReducer`] per slice, then combine them with one of two root reducers:
 
 ```rust
 use ruxe::{SequentialRootReducer, ParallelRootReducer};
@@ -78,24 +74,18 @@ let root = ParallelRootReducer::new((solar_reducer, battery_reducer, meter_reduc
 
 ### Compile-time guarantees of `ParallelRootReducer`
 
-The parallel variant only compiles if the slice-to-reducer mapping is a
-bijection. Two cases produce a compile error:
+The parallel variant only compiles if the slice-to-reducer mapping is a bijection. Two cases produce a compile error:
 
 | Mistake | Compile error |
 | --- | --- |
 | Two reducers target the same slice | "ambiguous impl" — the compiler can't resolve which reducer owns the slice |
 | A state slice has no matching reducer | "trait bound not satisfied" — no reducer found for the slice |
 
-No runtime check, no data race possible. The compiler refuses to build a
-parallel root reducer that would race on a shared slice. See
-[`examples/ems.rs`](examples/ems.rs) for a runnable side-by-side comparison
-showing a ~3x speedup with three slice reducers each doing ~50ms of work.
+No runtime check, no data race possible. The compiler refuses to build a parallel root reducer that would race on a shared slice. See [`examples/ems.rs`](examples/ems.rs) for a runnable side-by-side comparison showing a ~3x speedup with three slice reducers each doing ~50ms of work.
 
 ### Declaring the slice list
 
-`ParallelRootReducer` requires the state to declare its slice types via
-[`StateSlices`]. Rust's type system can't enumerate impls of
-`HasSlice<T>`, so the user lists them explicitly:
+`ParallelRootReducer` requires the state to declare its slice types via [`StateSlices`]. Rust's type system can't enumerate impls of `HasSlice<T>`, so the user lists them explicitly:
 
 ```rust
 use ruxe::{HasSlice, StateSlices};
@@ -109,63 +99,30 @@ A future `#[derive(StateSlices)]` will generate this from the struct fields.
 
 ## Design
 
-```mermaid
-classDiagram
-    class Store~S, E~ {
-        +new(state, reducer, middlewares, max_depth)
-        +dispatch(event) Result
-        +state() &S
-    }
-    class Reducer~S~ {
-        <<trait>>
-        +reduce(state, event) ReducerOutput
-    }
-    class SliceReducer {
-        <<trait>>
-        +reduce(slice, event) ReducerOutput
-    }
-    class HasSlice~T~ {
-        <<trait>>
-        +slice() &T
-        +set_slice(T) Self
-    }
-    class StateSlices {
-        <<trait>>
-        +Slices: HList
-    }
-    class SequentialRootReducer~T~ {
-        +new(tuple) Self
-    }
-    class ParallelRootReducer~L, E, Indices~ {
-        +new(tuple) Self
-    }
-    class ReducerOutput~S, E~ {
-        +state: S
-        +side_events: Option~Vec~E~~
-    }
-    class Middleware~S, E~ {
-        <<trait>>
-        +wrap(next) Next
-    }
+### Runtime pipeline
 
-    Store --> Reducer : drives
-    Store --> Middleware : composes (onion)
-    Reducer ..> ReducerOutput : returns
-    SliceReducer ..> ReducerOutput : returns
-    HasSlice ..> SliceReducer : exposes a slice to
-    SequentialRootReducer ..|> Reducer : implements
-    ParallelRootReducer ..|> Reducer : implements
-    SequentialRootReducer o-- SliceReducer : wraps tuple of
-    ParallelRootReducer o-- SliceReducer : wraps tuple of
-    ParallelRootReducer ..> StateSlices : requires
+```mermaid
+flowchart LR
+    User([User code]) -->|dispatch event| Store
+    Store -->|"wraps in onion chain"| MW[Middleware chain]
+    MW -->|"calls"| R[Reducer]
+    R -->|"new state + side events"| Store
 ```
 
-Slice reducers compose into a root reducer via either [`SequentialRootReducer<T>`]
-(applies them in order, threading state through `set_slice`) or
-[`ParallelRootReducer<L, E, Indices>`] (applies them on Rayon workers, with
-compile-time disjointness verification). `Next<S, E>` is the dispatch-chain
-closure each middleware wraps, and `DispatchError` is returned when
-side-event recursion exceeds the configured depth.
+### Composing slice reducers into a Reducer
+
+```mermaid
+flowchart TB
+    SR1[SliceReducer A] & SR2[SliceReducer B] & SR3[SliceReducer ...] -->|tuple| Wrapper{{SequentialRootReducer<br/>or<br/>ParallelRootReducer}}
+    Wrapper -.implements.-> R[Reducer trait]
+
+    State[State struct] -.must impl HasSlice&lt;T&gt; per slice.-> SR1
+    ParRR[ParallelRootReducer only] -.requires.-> SS[StateSlices on State]
+
+    style Wrapper fill:#f9f,stroke:#333,stroke-width:2px
+```
+
+Slice reducers compose into a root reducer via either [`SequentialRootReducer<T>`] (applies them in order, threading state through `set_slice`) or [`ParallelRootReducer<L, E, Indices>`] (applies them on Rayon workers, with compile-time disjointness verification). `Next<S, E>` is the dispatch-chain closure each middleware wraps, and `DispatchError` is returned when side-event recursion exceeds the configured depth.
 
 For exact signatures, trait bounds, and runnable examples, see the rustdoc — run `cargo doc --open` (it will be published on docs.rs once ruxe ships to crates.io).
 
@@ -181,7 +138,7 @@ Redux uses the term "action" for messages dispatched to the store. ruxe uses **e
 | -------------------------- | --------------------------------------------------- | ----------------------------------------------------------- |
 | Message term               | `Action`                                            | `Event`                                                     |
 | State structure            | single state; every reducer sees all of it          | isolated slices — a `SliceReducer` can only reach its slice |
-| Root composition           | one reducer combines everything by hand             | `SequentialRootReducer` or `ParallelRootReducer` wrap a tuple, no glue code |
+| Root composition           | one reducer combines everything by hand             | wrapped in `SequentialRootReducer` / `ParallelRootReducer`  |
 | Reducer input              | `state: State` (owned, mutate-and-return, no clone) | `state: &S` (borrowed; reducer returns a fresh state)       |
 | Side events in reducer     | none — reducers are pure `state → state`            | reducers may emit side events, re-dispatched by the store   |
 | Side effects in middleware | yes — re-dispatch via `inner.dispatch().await`      | yes — return side events that the store queues              |
@@ -189,7 +146,7 @@ Redux uses the term "action" for messages dispatched to the store. ruxe uses **e
 | Concurrency                | lock-free multi-producer dispatch via a worker task | single-owner `&mut self`, parallel reducers via Rayon       |
 | Middleware registration    | manual `.wrap(m).await` chain, separate store type  | passed to `Store::new` (empty `vec` to opt out)             |
 | Selectors                  | built-in (`select`, memoized state queries)         | none — slices are accessed directly via `HasSlice`          |
-| Parallel reducers          | no                                                  | `ParallelRootReducer` — rayon-based, compile-time disjoint slices |
+| Parallel reducers          | no                                                  | `ParallelRootReducer` (rayon, compile-time disjoint)        |
 
 In short: redux-rs is async-first and ships more batteries (selectors, Tokio integration); ruxe trades those for **compile-time slice isolation**, **side events straight from reducers**, and a **runtime-agnostic synchronous core** that you wrap in whatever execution model you need.
 
