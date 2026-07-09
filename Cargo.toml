@@ -5,11 +5,18 @@ edition = "2024"
 
 [dependencies]
 rayon = "1.12.0"
+futures = "0.3.32"
 
 [dev-dependencies.cargo-husky]
 version = "1.5.0"
 default-features = false
-features = ["precommit-hook", "run-cargo-clippy", "run-cargo-fmt"]
+# Custom hook in .cargo-husky/hooks/ (runs clippy with --all-targets).
+features = ["user-hooks"]
 
 [dev-dependencies.trybuild]
 version = "1.0.117"
+
+[dev-dependencies.tokio]
+version = "1.52.3"
+# Only what the examples use — "full" would drag net/fs/process/signal into every dev build.
+features = ["rt-multi-thread", "macros", "time"]

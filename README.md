@@ -97,6 +97,38 @@ impl StateSlices for AppState {
 
 A future `#[derive(StateSlices)]` will generate this from the struct fields.
 
+## Async dispatch
+
+The synchronous core stays synchronous; the async layer is **optional** — a plain `Store` works unchanged, and you only bring in the actor loop if you need it. [`init_actor_loop`] wraps a `Store` into an actor loop that owns the state, and hands back a cloneable, `Send + 'static` dispatch handle:
+
+```rust
+use ruxe::{init_actor_loop, Store};
+
+let (handle, actor_loop) = init_actor_loop(store, 32);
+
+// You spawn the producers — ruxe never spawns. A cloned handle can
+// dispatch from any task or thread.
+let mut producer = handle.clone();
+tokio::spawn(async move {
+    producer.dispatch(event).await.expect("loop is alive");
+});
+drop(handle); // run() only returns once every handle is dropped
+
+// Drive the loop by awaiting it; it owns the store, serializes every
+// dispatch, and returns the final store on clean shutdown.
+let store = actor_loop.run().await.expect("clean shutdown");
+```
+
+The loop is the store's **sole owner**: dispatch stays lock-free and serialized however many producers feed it, and the core stays runtime-agnostic.
+
+Planned companions:
+
+- **[tokio adapter][i37]** — a reference executor behind a feature flag
+- **[state subscription][i35]** — react to state changes from outside the loop
+- **[event stream][i36]** — react to the dispatched events themselves (`action$`-style)
+
+Runnable demo: [`examples/async_dispatch.rs`](examples/async_dispatch.rs).
+
 ## Design
 
 ### Runtime pipeline
@@ -142,7 +174,7 @@ Redux uses the term "action" for messages dispatched to the store. ruxe uses **e
 | Reducer input              | `state: State` (owned, mutate-and-return, no clone) | `state: &S` (borrowed; reducer returns a fresh state)       |
 | Side events in reducer     | none — reducers are pure `state → state`            | reducers may emit side events, re-dispatched by the store   |
 | Side effects in middleware | yes — re-dispatch via `inner.dispatch().await`      | yes — return side events that the store queues              |
-| Execution model            | async-native, requires Tokio                        | synchronous, runtime-agnostic (async planned)               |
+| Execution model            | async-native, requires Tokio                        | sync core; optional async ingestion via an actor loop       |
 | Concurrency                | lock-free multi-producer dispatch via a worker task | single-owner `&mut self`, parallel reducers via Rayon       |
 | Middleware registration    | manual `.wrap(m).await` chain, separate store type  | passed to `Store::new` (empty `vec` to opt out)             |
 | Selectors                  | built-in (`select`, memoized state queries)         | none — slices are accessed directly via `HasSlice`          |
@@ -162,6 +194,10 @@ In short: redux-rs is async-first and ships more batteries (selectors, Tokio int
 | 1       | [Documentation & EMS example][i7]  | done    |
 | 2       | [Parallel RootReducer (rayon)][i8] | done    |
 | 2       | [Benchmarks][i9]                   | planned |
+| 3       | [Async dispatch (actor loop)][i23] | done    |
+| 3       | [tokio adapter][i37]               | planned |
+| 3       | [State-change subscription][i35]   | planned |
+| 3       | [Event-stream subscription][i36]   | planned |
 
 [i2]: https://github.com/corentin-core/ruxe/issues/2
 [i3]: https://github.com/corentin-core/ruxe/issues/3
@@ -171,10 +207,18 @@ In short: redux-rs is async-first and ships more batteries (selectors, Tokio int
 [i7]: https://github.com/corentin-core/ruxe/issues/7
 [i8]: https://github.com/corentin-core/ruxe/issues/8
 [i9]: https://github.com/corentin-core/ruxe/issues/9
+[i23]: https://github.com/corentin-core/ruxe/issues/23
+[i35]: https://github.com/corentin-core/ruxe/issues/35
+[i36]: https://github.com/corentin-core/ruxe/issues/36
+[i37]: https://github.com/corentin-core/ruxe/issues/37
 
 See [the project epic](https://github.com/corentin-core/ruxe/issues/1) for the full design and task breakdown.
 
-> **Note on parallel reducers**: classic Redux is strictly sequential — each reducer sees the previous one's changes, making state transitions predictable and easy to debug. Parallel reducers trade that guarantee for performance by giving each reducer a frozen snapshot of the state before dispatch. This is arguably an anti-pattern in the Redux sense, but it's an interesting space to explore in performance-sensitive or embedded contexts where state slices are truly independent. ruxe treats it as an opt-in experiment, not a default.
+> **Note on parallel reducers** — a deliberate departure from Redux orthodoxy:
+>
+> - Classic Redux is strictly sequential: each reducer sees the previous one's changes, which keeps state transitions predictable and easy to debug.
+> - `ParallelRootReducer` trades that guarantee for performance: every reducer reads a frozen snapshot of the pre-dispatch state.
+> - Arguably an anti-pattern in the Redux sense — ruxe ships it as an explicit choice for performance-sensitive or embedded contexts where slices are truly independent, never as the default.
 
 ## A learning project
 

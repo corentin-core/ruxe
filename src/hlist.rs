@@ -21,16 +21,16 @@ pub struct HNil;
 
 #[doc(hidden)]
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct HCons<H, T> {
-    pub head: H,
-    pub tail: T,
+pub struct HCons<Head, Tail> {
+    pub head: Head,
+    pub tail: Tail,
 }
 
 #[doc(hidden)]
 pub trait HList {}
 
 impl HList for HNil {}
-impl<H, T: HList> HList for HCons<H, T> {}
+impl<Head, Tail: HList> HList for HCons<Head, Tail> {}
 
 macro_rules! hlist {
     () => { HNil };

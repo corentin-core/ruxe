@@ -8,6 +8,7 @@
 #[cfg(test)]
 mod fixtures;
 
+pub mod actor;
 mod hlist;
 mod indices;
 mod middleware;
@@ -17,11 +18,11 @@ mod sequential_root_reducer;
 mod state;
 mod store;
 
+pub use actor::{ActorLoop, DispatchHandle, init_actor_loop};
 #[doc(hidden)]
 pub use hlist::{HCons, HList, HNil, IntoHList};
 #[doc(hidden)]
 pub use indices::{Here, There};
-
 pub use middleware::Middleware;
 pub use middleware::Next;
 pub use parallel_root_reducer::ParallelRootReducer;

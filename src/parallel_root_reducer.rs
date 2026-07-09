@@ -43,7 +43,7 @@ use std::marker::PhantomData;
 ///
 /// # Type parameters
 ///
-/// - `L` — the HList of reducers (built from the tuple via [`IntoHList`])
+/// - `Reducers` — the HList of reducers (built from the tuple via [`IntoHList`])
 /// - `E` — the shared event type across reducers (inferred from usage)
 /// - `Indices` — the HList of positional witnesses used by the compiler to
 ///   resolve each slice's reducer (inferred from usage)
@@ -61,19 +61,19 @@ use std::marker::PhantomData;
 /// # Arity
 ///
 /// Tuples of 1 to 12 [`SliceReducer`]s are supported.
-pub struct ParallelRootReducer<L, E, Indices> {
-    slice_reducers: L,
+pub struct ParallelRootReducer<Reducers, E, Indices> {
+    slice_reducers: Reducers,
     _marker: PhantomData<(E, Indices)>,
 }
 
-impl<L, E, Indices> ParallelRootReducer<L, E, Indices> {
+impl<Reducers, E, Indices> ParallelRootReducer<Reducers, E, Indices> {
     /// Builds a parallel root reducer from a tuple of slice reducers.
     ///
     /// The tuple is converted to an internal HList via [`IntoHList`] so the
     /// recursive trait machinery can walk it at compile time.
-    pub fn new<T>(reducers: T) -> Self
+    pub fn new<Tuple>(reducers: Tuple) -> Self
     where
-        T: IntoHList<Output = L>,
+        Tuple: IntoHList<Output = Reducers>,
     {
         ParallelRootReducer {
             slice_reducers: reducers.into_hlist(),
@@ -115,16 +115,16 @@ where
     }
 }
 
-pub(crate) trait ApplyReducers<L, S, E, Indices> {
-    fn apply(reducers: &L, state: &S, event: &E) -> ReducerOutput<S, E>;
+pub(crate) trait ApplyReducers<Reducers, S, E, Indices> {
+    fn apply(reducers: &Reducers, state: &S, event: &E) -> ReducerOutput<S, E>;
 }
 
 /// Implementation when recursion reaches the end of the tuple of slice reducers.
-impl<L, S, E> ApplyReducers<L, S, E, HNil> for HNil
+impl<Reducers, S, E> ApplyReducers<Reducers, S, E, HNil> for HNil
 where
     S: Clone,
 {
-    fn apply(_reducers: &L, state: &S, _event: &E) -> ReducerOutput<S, E> {
+    fn apply(_reducers: &Reducers, state: &S, _event: &E) -> ReducerOutput<S, E> {
         ReducerOutput {
             state: state.clone(),
             side_events: None,
@@ -133,17 +133,17 @@ where
 }
 
 /// Implementation when recursion continues through the tuple of slice reducers.
-impl<L, HeadReducer, S, E, HeadSlice, RestSlices, Index, RestIndices>
-    ApplyReducers<L, S, E, HCons<Index, RestIndices>> for HCons<HeadSlice, RestSlices>
+impl<Reducers, HeadReducer, S, E, HeadSlice, RestSlices, Index, RestIndices>
+    ApplyReducers<Reducers, S, E, HCons<Index, RestIndices>> for HCons<HeadSlice, RestSlices>
 where
-    L: FindReducerBySlice<HeadSlice, Index, Reducer = HeadReducer> + Sync,
+    Reducers: FindReducerBySlice<HeadSlice, Index, Reducer = HeadReducer> + Sync,
     HeadReducer: SliceReducer<Slice = HeadSlice, Event = E> + Sync,
     S: HasSlice<HeadSlice> + Clone + Send + Sync,
     E: Send + Sync,
     HeadSlice: Send + Sync,
-    RestSlices: ApplyReducers<L, S, E, RestIndices>,
+    RestSlices: ApplyReducers<Reducers, S, E, RestIndices>,
 {
-    fn apply(reducers: &L, state: &S, event: &E) -> ReducerOutput<S, E> {
+    fn apply(reducers: &Reducers, state: &S, event: &E) -> ReducerOutput<S, E> {
         let reducer = reducers.find();
         let (head_output, rest_output) = rayon::join(
             || reducer.reduce(state.slice(), event),
@@ -169,15 +169,19 @@ where
     }
 }
 
-impl<S, L, E, Indices> Reducer<S> for ParallelRootReducer<L, E, Indices>
+impl<S, Reducers, E, Indices> Reducer<S> for ParallelRootReducer<Reducers, E, Indices>
 where
     S: StateSlices + Clone,
-    S::Slices: ApplyReducers<L, S, E, Indices>,
+    S::Slices: ApplyReducers<Reducers, S, E, Indices>,
 {
     type Event = E;
 
     fn reduce(&self, state: &S, event: &Self::Event) -> ReducerOutput<S, Self::Event> {
-        <S::Slices as ApplyReducers<L, S, E, Indices>>::apply(&self.slice_reducers, state, event)
+        <S::Slices as ApplyReducers<Reducers, S, E, Indices>>::apply(
+            &self.slice_reducers,
+            state,
+            event,
+        )
     }
 }
 

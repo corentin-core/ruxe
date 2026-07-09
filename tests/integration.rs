@@ -1,9 +1,11 @@
 //! Integration tests exercising the full `Store + RootReducer + Middleware`
 //! pipeline. Complements unit tests by validating the cross-component flow.
 
+use futures::executor::block_on;
+use futures::join;
 use ruxe::{
     HasSlice, Middleware, Next, ParallelRootReducer, ReducerOutput, SequentialRootReducer,
-    SliceReducer, StateSlices, Store,
+    SliceReducer, StateSlices, Store, init_actor_loop,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -175,4 +177,68 @@ fn parallel_root_reducer_emits_side_events_through_store() {
 
     let log = log.lock().unwrap();
     assert_eq!(*log, vec!["Ping", "Pong"]);
+}
+
+#[test]
+fn actor_loop_integration() {
+    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorder = Recorder { log: log.clone() };
+
+    let store = Store::new(
+        initial_state(),
+        ParallelRootReducer::new((CountReducer, LabelReducer)),
+        vec![Box::new(recorder)],
+        10,
+    );
+
+    let (handle, actor_loop) = init_actor_loop(store, 10);
+    let mut handle1 = handle.clone();
+    let dispatch_future_1 = async move {
+        handle1
+            .dispatch(Event::Ping)
+            .await
+            .expect("Dispatch should succeed");
+    };
+    let mut handle2 = handle.clone();
+    let dispatch_future_2 = async move {
+        handle2
+            .dispatch(Event::Increment)
+            .await
+            .expect("Dispatch should succeed");
+    };
+    let mut handle3 = handle.clone();
+    let dispatch_future_3 = async move {
+        handle3
+            .dispatch(Event::SetLabel(String::from("done")))
+            .await
+            .expect("Dispatch should succeed");
+    };
+    drop(handle); // Drop the original handle to avoid deadlock in the actor loop
+    let store = block_on(async {
+        let (_, _, _, loop_result) = join!(
+            dispatch_future_1,
+            dispatch_future_2,
+            dispatch_future_3,
+            actor_loop.run()
+        );
+        loop_result.expect("Actor loop should complete successfully")
+    });
+
+    let log = log.lock().unwrap();
+
+    // The order of events in the log may vary due to concurrency, so we check for presence rather than order.
+    assert!(log.contains(&"Ping".to_string()));
+    assert!(log.contains(&"Pong".to_string()));
+    assert!(log.contains(&"Increment".to_string()));
+    assert!(log.contains(&"SetLabel(\"done\")".to_string()));
+
+    assert_eq!(
+        store.state(),
+        &AppState {
+            count: CountSlice { value: 1 },
+            label: LabelSlice {
+                text: String::from("done"),
+            },
+        }
+    );
 }

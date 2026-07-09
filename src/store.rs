@@ -5,6 +5,8 @@
 use crate::middleware::{Middleware, Next};
 use crate::reducer::Reducer;
 use std::collections::VecDeque;
+use std::error::Error;
+use std::fmt::Display;
 
 /// Errors returned by [`Store::dispatch`].
 #[derive(Debug, PartialEq)]
@@ -17,6 +19,20 @@ pub enum DispatchError {
         max: usize,
     },
 }
+
+impl Display for DispatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DispatchError::MaxDepthExceeded { depth, max } => write!(
+                f,
+                "Side-event recursion limit reached: event at depth {} emitted side events (max_depth = {})",
+                depth, max
+            ),
+        }
+    }
+}
+
+impl Error for DispatchError {}
 
 struct PendingEvent<E> {
     event: E,
