@@ -1,0 +1,11 @@
+#!/bin/sh
+#
+# Pre-commit checks (installed by cargo-husky from .cargo-husky/hooks/).
+# --all-targets so examples, tests, and benches are linted too.
+
+set -e
+
+echo '+cargo fmt -- --check'
+cargo fmt -- --check
+echo '+cargo clippy --all-targets -- -D warnings'
+cargo clippy --all-targets -- -D warnings

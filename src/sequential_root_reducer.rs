@@ -34,13 +34,13 @@ use crate::{HasSlice, Reducer, ReducerOutput, SliceReducer};
 /// # Arity
 ///
 /// Tuples of 1 to 12 [`SliceReducer`]s are supported.
-pub struct SequentialRootReducer<T> {
-    reducers: T,
+pub struct SequentialRootReducer<Reducers> {
+    reducers: Reducers,
 }
 
-impl<T> SequentialRootReducer<T> {
+impl<Reducers> SequentialRootReducer<Reducers> {
     /// Builds a sequential root reducer from a tuple of slice reducers.
-    pub fn new(reducers: T) -> Self {
+    pub fn new(reducers: Reducers) -> Self {
         SequentialRootReducer { reducers }
     }
 }

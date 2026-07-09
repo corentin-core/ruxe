@@ -5,11 +5,11 @@
 //! numeral (`Here` = 0, `There<Here>` = 1, `There<There<Here>>` = 2, …).
 //! The compiler infers them automatically during trait resolution — they
 //! are never written by the user, but appear in the concrete types of
-//! values like `ParallelRootReducer<L, E, Indices>`.
+//! values like `ParallelRootReducer<Reducers, E, Indices>`.
 //!
 //! # Attribution
 //!
-//! The `Here`/`There<I>` pattern is the same disambiguation trick used by
+//! The `Here`/`There<Index>` pattern is the same disambiguation trick used by
 //! [`frunk`](https://crates.io/crates/frunk)'s `Selector`/`Plucker` traits;
 //! reimplemented here for the same reason as the HList types — to avoid a
 //! transitive dependency for an internal detail.
@@ -24,9 +24,9 @@ pub struct Here;
 
 /// Position witness: "target is somewhere inside the tail of the current HCons".
 ///
-/// Wraps the inner position `I`, equivalent to "Peano successor of `I`".
+/// Wraps the inner position `Index`, equivalent to "Peano successor of `Index`".
 /// A path like `There<There<Here>>` means "skip two heads, then here".
 #[doc(hidden)]
-pub struct There<I> {
-    _marker: PhantomData<I>,
+pub struct There<Index> {
+    _marker: PhantomData<Index>,
 }
