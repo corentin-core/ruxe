@@ -1,7 +1,7 @@
 error[E0277]: the trait bound `ruxe::HCons<FirstReducer, ruxe::HNil>: ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not satisfied
-  --> tests/ui/missing_reducer.rs:91:26
+  --> tests/ui/missing_reducer.rs:92:26
    |
-91 |     let _ = root_reducer.reduce(&state, &event);
+92 |     let _ = root_reducer.reduce(&mut state, &event);
    |                          ^^^^^^ the trait `ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not implemented for `ruxe::HCons<FirstReducer, ruxe::HNil>`
    |
 help: `ruxe::HCons<HeadReducer, TailReducers>` implements trait `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, Index>`
@@ -18,16 +18,16 @@ help: `ruxe::HCons<HeadReducer, TailReducers>` implements trait `ruxe::parallel_
    | | where
    | |     TailReducers: FindReducerBySlice<TargetSlice, TailIndex>,
    | |_____________________________________________________________^ `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::There<TailIndex>>`
-   = note: required for `ruxe::HCons<SecondSlice, ruxe::HNil>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<_, ruxe::HNil>>`
+   = note: required for `ruxe::HCons<&'s mut SecondSlice, ruxe::HNil>` to implement `for<'s> ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<_, ruxe::HNil>>`
    = note: 1 redundant requirement hidden
-   = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>`
+   = note: required for `ruxe::HCons<&'s mut FirstSlice, ruxe::HCons<&'s mut SecondSlice, ruxe::HNil>>` to implement `for<'s> ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>`
    = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HNil>, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>` to implement `Reducer<MyState>`
 
 error[E0277]: the trait bound `ruxe::HCons<FirstReducer, ruxe::HNil>: ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not satisfied
-  --> tests/ui/missing_reducer.rs:91:33
+  --> tests/ui/missing_reducer.rs:92:33
    |
-91 |     let _ = root_reducer.reduce(&state, &event);
-   |                          ------ ^^^^^^ the trait `ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not implemented for `ruxe::HCons<FirstReducer, ruxe::HNil>`
+92 |     let _ = root_reducer.reduce(&mut state, &event);
+   |                          ------ ^^^^^^^^^^ the trait `ruxe::parallel_root_reducer::FindReducerBySlice<SecondSlice, _>` is not implemented for `ruxe::HCons<FirstReducer, ruxe::HNil>`
    |                          |
    |                          required by a bound introduced by this call
    |
@@ -45,7 +45,7 @@ help: `ruxe::HCons<HeadReducer, TailReducers>` implements trait `ruxe::parallel_
    | | where
    | |     TailReducers: FindReducerBySlice<TargetSlice, TailIndex>,
    | |_____________________________________________________________^ `ruxe::parallel_root_reducer::FindReducerBySlice<TargetSlice, ruxe::There<TailIndex>>`
-   = note: required for `ruxe::HCons<SecondSlice, ruxe::HNil>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<_, ruxe::HNil>>`
+   = note: required for `ruxe::HCons<&'s mut SecondSlice, ruxe::HNil>` to implement `for<'s> ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<_, ruxe::HNil>>`
    = note: 1 redundant requirement hidden
-   = note: required for `ruxe::HCons<FirstSlice, ruxe::HCons<SecondSlice, ruxe::HNil>>` to implement `ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>`
+   = note: required for `ruxe::HCons<&'s mut FirstSlice, ruxe::HCons<&'s mut SecondSlice, ruxe::HNil>>` to implement `for<'s> ruxe::parallel_root_reducer::ApplyReducers<ruxe::HCons<FirstReducer, ruxe::HNil>, MyState, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>`
    = note: required for `ParallelRootReducer<ruxe::HCons<FirstReducer, ruxe::HNil>, MyEvent, ruxe::HCons<ruxe::Here, ruxe::HCons<_, ruxe::HNil>>>` to implement `Reducer<MyState>`

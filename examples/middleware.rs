@@ -44,20 +44,16 @@ struct CounterReducer;
 impl Reducer<State> for CounterReducer {
     type Event = Event;
 
-    fn reduce(&self, state: &State, event: &Event) -> ReducerOutput<State, Event> {
+    fn reduce(&self, state: &mut State, event: &Event) -> ReducerOutput<Event> {
         match event {
-            Event::Increment {} => ReducerOutput {
-                state: State {
-                    value: state.value + 1,
-                },
-                side_events: None,
-            },
-            Event::Decrement {} => ReducerOutput {
-                state: State {
-                    value: state.value - 1,
-                },
-                side_events: None,
-            },
+            Event::Increment {} => {
+                state.value += 1;
+                None
+            }
+            Event::Decrement {} => {
+                state.value -= 1;
+                None
+            }
         }
     }
 }

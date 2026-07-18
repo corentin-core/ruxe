@@ -72,9 +72,7 @@ impl<S, E> Store<S, E> {
         E: 'static,
     {
         let base = Box::new(move |state: &mut S, event: E| -> Option<Vec<E>> {
-            let output = reducer.reduce(state, &event);
-            *state = output.state;
-            output.side_events
+            reducer.reduce(state, &event)
         });
         Store {
             state,
@@ -161,42 +159,20 @@ mod tests {
         impl Reducer<SimpleState> for SimpleReducer {
             type Event = Event;
 
-            fn reduce(
-                &self,
-                state: &SimpleState,
-                event: &Self::Event,
-            ) -> ReducerOutput<SimpleState, Event> {
+            fn reduce(&self, state: &mut SimpleState, event: &Self::Event) -> ReducerOutput<Event> {
                 match event {
-                    FirstValueUpdate { value } => ReducerOutput {
-                        state: SimpleState {
-                            first_value: *value,
-                            ..*state
-                        },
-                        side_events: None,
-                    },
-                    SecondValueUpdate { value } => ReducerOutput {
-                        state: SimpleState {
-                            second_value: *value,
-                            ..*state
-                        },
-                        side_events: None,
-                    },
-                    EmitSide {} => ReducerOutput {
-                        state: state.clone(),
-                        side_events: Some(vec![SecondValueUpdate { value: 2 }, IgnoredUpdate {}]),
-                    },
-                    EmitNestedSide {} => ReducerOutput {
-                        state: state.clone(),
-                        side_events: Some(vec![EmitSide {}, FirstValueUpdate { value: 2.0 }]),
-                    },
-                    EmitSelfRecursive {} => ReducerOutput {
-                        state: state.clone(),
-                        side_events: Some(vec![EmitSelfRecursive {}]),
-                    },
-                    _ => ReducerOutput {
-                        state: state.clone(),
-                        side_events: None,
-                    },
+                    FirstValueUpdate { value } => {
+                        state.first_value = *value;
+                        None
+                    }
+                    SecondValueUpdate { value } => {
+                        state.second_value = *value;
+                        None
+                    }
+                    EmitSide {} => Some(vec![SecondValueUpdate { value: 2 }, IgnoredUpdate {}]),
+                    EmitNestedSide {} => Some(vec![EmitSide {}, FirstValueUpdate { value: 2.0 }]),
+                    EmitSelfRecursive {} => Some(vec![EmitSelfRecursive {}]),
+                    _ => None,
                 }
             }
         }

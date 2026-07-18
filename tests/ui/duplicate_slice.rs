@@ -11,7 +11,10 @@
 //! change `FindReducerBySlice` or related machinery, re-bless with
 //! `TRYBUILD=overwrite cargo test --test compile_fail`.
 
-use ruxe::{HasSlice, ParallelRootReducer, Reducer, ReducerOutput, SliceReducer, StateSlices};
+use ruxe::{
+    HasSlice, IntoHList as _, ParallelRootReducer, Reducer, ReducerOutput, SliceReducer,
+    StateSlices,
+};
 
 fn main() {
     #[derive(Clone)]
@@ -24,7 +27,6 @@ fn main() {
         value: f64,
     }
 
-
     #[derive(Clone)]
     struct MyState {
         first: FirstSlice,
@@ -32,27 +34,23 @@ fn main() {
     }
 
     impl HasSlice<FirstSlice> for MyState {
-        fn slice(&self) -> &FirstSlice {
-            &self.first
-        }
-        fn set_slice(mut self, slice: FirstSlice) -> Self {
-            self.first = slice;
-            self
+        fn slice(&mut self) -> &mut FirstSlice {
+            &mut self.first
         }
     }
 
     impl HasSlice<SecondSlice> for MyState {
-        fn slice(&self) -> &SecondSlice {
-            &self.second
-        }
-        fn set_slice(mut self, slice: SecondSlice) -> Self {
-            self.second = slice;
-            self
+        fn slice(&mut self) -> &mut SecondSlice {
+            &mut self.second
         }
     }
 
     impl StateSlices for MyState {
-        type Slices = ruxe::HList!(FirstSlice, SecondSlice);
+        type Slices<'s> = ruxe::HList!(&'s mut FirstSlice, &'s mut SecondSlice);
+
+        fn to_slices(&mut self) -> Self::Slices<'_> {
+            (&mut self.first, &mut self.second).into_hlist()
+        }
     }
 
     enum MyEvent {
@@ -66,10 +64,13 @@ fn main() {
         type Event = MyEvent;
         type Slice = FirstSlice;
 
-        fn reduce(&self, slice: &FirstSlice, event: &MyEvent) -> ReducerOutput<FirstSlice, MyEvent> {
+        fn reduce(&self, slice: &mut FirstSlice, event: &MyEvent) -> ReducerOutput<MyEvent> {
             match event {
-                MyEvent::UpdateFirst(v) => ReducerOutput { state: FirstSlice { value: v.value }, side_events: None },
-                _ => ReducerOutput { state: slice.clone(), side_events: None },
+                MyEvent::UpdateFirst(v) => {
+                    slice.value = v.value;
+                    None
+                }
+                _ => None,
             }
         }
     }
@@ -80,16 +81,18 @@ fn main() {
         type Event = MyEvent;
         type Slice = SecondSlice;
 
-        fn reduce(&self, slice: &SecondSlice, event: &MyEvent) -> ReducerOutput<SecondSlice, MyEvent> {
+        fn reduce(&self, slice: &mut SecondSlice, event: &MyEvent) -> ReducerOutput<MyEvent> {
             match event {
-                MyEvent::UpdateSecond(v) => ReducerOutput { state: SecondSlice { value: v.value }, side_events: None },
-                _ => ReducerOutput { state: slice.clone(), side_events: None },
+                MyEvent::UpdateSecond(v) => {
+                    slice.value = v.value;
+                    None
+                }
+                _ => None,
             }
         }
     }
 
-
-    let state = MyState {
+    let mut state = MyState {
         first: FirstSlice { value: 0 },
         second: SecondSlice { value: 0.0 },
     };
@@ -101,5 +104,6 @@ fn main() {
     // `reduce`. The error appears at the `.reduce(...)` call site below —
     // type inference for `Indices` cannot pick a unique path.
     let root_reducer = ParallelRootReducer::new((FirstReducer, FirstReducer, SecondReducer));
-    let _ = root_reducer.reduce(&state, &event);
+    let _ = root_reducer.reduce(&mut state, &event);
 }
+

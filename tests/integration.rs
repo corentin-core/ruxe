@@ -4,8 +4,9 @@
 use futures::executor::block_on;
 use futures::{StreamExt, join};
 use ruxe::{
-    HasSlice, Middleware, Next, ParallelRootReducer, ReducerOutput, SequentialRootReducer,
-    SliceReducer, StateSlices, Store, init_actor_loop, init_actor_loop_with_subscription,
+    HasSlice, IntoHList as _, Middleware, Next, ParallelRootReducer, ReducerOutput,
+    SequentialRootReducer, SliceReducer, StateSlices, Store, init_actor_loop,
+    init_actor_loop_with_subscription,
 };
 use std::sync::{Arc, Mutex};
 
@@ -26,27 +27,23 @@ struct AppState {
 }
 
 impl HasSlice<CountSlice> for AppState {
-    fn slice(&self) -> &CountSlice {
-        &self.count
-    }
-    fn set_slice(mut self, slice: CountSlice) -> Self {
-        self.count = slice;
-        self
+    fn slice(&mut self) -> &mut CountSlice {
+        &mut self.count
     }
 }
 
 impl HasSlice<LabelSlice> for AppState {
-    fn slice(&self) -> &LabelSlice {
-        &self.label
-    }
-    fn set_slice(mut self, slice: LabelSlice) -> Self {
-        self.label = slice;
-        self
+    fn slice(&mut self) -> &mut LabelSlice {
+        &mut self.label
     }
 }
 
 impl StateSlices for AppState {
-    type Slices = ruxe::HList!(CountSlice, LabelSlice);
+    type Slices<'s> = ruxe::HList!(&'s mut CountSlice, &'s mut LabelSlice);
+
+    fn to_slices(&mut self) -> Self::Slices<'_> {
+        (&mut self.count, &mut self.label).into_hlist()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -61,22 +58,14 @@ struct CountReducer;
 impl SliceReducer for CountReducer {
     type Event = Event;
     type Slice = CountSlice;
-    fn reduce(&self, slice: &CountSlice, event: &Event) -> ReducerOutput<CountSlice, Event> {
+    fn reduce(&self, slice: &mut CountSlice, event: &Event) -> ReducerOutput<Event> {
         match event {
-            Event::Increment => ReducerOutput {
-                state: CountSlice {
-                    value: slice.value + 1,
-                },
-                side_events: None,
-            },
-            Event::Ping => ReducerOutput {
-                state: slice.clone(),
-                side_events: Some(vec![Event::Pong]),
-            },
-            _ => ReducerOutput {
-                state: slice.clone(),
-                side_events: None,
-            },
+            Event::Increment => {
+                slice.value += 1;
+                None
+            }
+            Event::Ping => Some(vec![Event::Pong]),
+            _ => None,
         }
     }
 }
@@ -85,17 +74,12 @@ struct LabelReducer;
 impl SliceReducer for LabelReducer {
     type Event = Event;
     type Slice = LabelSlice;
-    fn reduce(&self, slice: &LabelSlice, event: &Event) -> ReducerOutput<LabelSlice, Event> {
-        match event {
-            Event::SetLabel(text) => ReducerOutput {
-                state: LabelSlice { text: text.clone() },
-                side_events: None,
-            },
-            _ => ReducerOutput {
-                state: slice.clone(),
-                side_events: None,
-            },
+    fn reduce(&self, slice: &mut LabelSlice, event: &Event) -> ReducerOutput<Event> {
+        if let Event::SetLabel(text) = event {
+            slice.text = text.clone();
         }
+
+        None
     }
 }
 
