@@ -48,29 +48,27 @@ impl<Reducers> SequentialRootReducer<Reducers> {
 /// Generates `Reducer<S>` for `SequentialRootReducer<(R0, R1, ...)>`, invoked per arity.
 ///
 /// Bounds generated:
-/// - `S: Clone` — the state is cloned once to chain `set_slice` calls
 /// - `Ri: SliceReducer<Event = E>` — shared `Event` type across the tuple
 /// - `S: HasSlice<Ri::Slice>` — required per `Ri` to extract its slice
 macro_rules! impl_sequential_reducer_tuple {
     ($($idx:tt $t:ident),+) => {
         impl<S, E, $($t,)+> Reducer<S> for SequentialRootReducer<($($t,)+)>
         where
-            S: Clone,
             $($t: SliceReducer<Event = E>, S: HasSlice<$t::Slice>,)+
         {
             type Event = E;
 
-            fn reduce(&self, state: &S, event: &Self::Event) -> ReducerOutput<S, Self::Event> {
+            fn reduce(&self, state: &mut S, event: &Self::Event) -> ReducerOutput<Self::Event> {
                 let mut side_events: Vec<Self::Event> = Vec::new();
-                let new_state = state.clone();
+
                 $(
-                    let slice_update = self.reducers.$idx.reduce(new_state.slice(), event);
-                    let new_state = new_state.set_slice(slice_update.state);
-                    if let Some(events) = slice_update.side_events {
+                    let new_side_events = self.reducers.$idx.reduce(state.slice(), event);
+                    if let Some(events) = new_side_events {
                         side_events.extend(events);
                     }
                 )+
-                ReducerOutput{state: new_state, side_events: if side_events.is_empty() { None } else { Some(side_events) }}
+
+                if side_events.is_empty() { None } else { Some(side_events) }
             }
         }
     };
@@ -97,7 +95,7 @@ mod tests {
         ExampleState, FirstSlice, make_reducer_tuple, make_state, no_op, shared_tests,
     };
     use crate::sequential_root_reducer::SequentialRootReducer;
-    use crate::{Reducer, ReducerOutput, SliceReducer};
+    use crate::{Reducer, SliceReducer};
 
     fn make_root_reducer() -> impl Reducer<ExampleState, Event = Event> {
         SequentialRootReducer::new(make_reducer_tuple())
@@ -134,46 +132,46 @@ mod tests {
     #[test]
     fn last_reducer_wins_for_duplicate_slice() {
         fn make_slice_reducer_set() -> impl SliceReducer<Slice = FirstSlice, Event = Event> {
-            ClosureSliceReducer::new(|slice: &FirstSlice, event: &Event| match event {
-                FirstValueOrderingTest {} => ReducerOutput {
-                    state: FirstSlice { value: 1 },
-                    side_events: None,
-                },
+            ClosureSliceReducer::new(|slice: &mut FirstSlice, event: &Event| match event {
+                FirstValueOrderingTest {} => {
+                    slice.value = 1;
+                    None
+                }
                 _ => no_op(slice, event),
             })
         }
 
         fn make_slice_reducer_reset() -> impl SliceReducer<Slice = FirstSlice, Event = Event> {
-            ClosureSliceReducer::new(|slice: &FirstSlice, event: &Event| match event {
-                FirstValueOrderingTest {} => ReducerOutput {
-                    state: FirstSlice { value: 0 },
-                    side_events: None,
-                },
+            ClosureSliceReducer::new(|slice: &mut FirstSlice, event: &Event| match event {
+                FirstValueOrderingTest {} => {
+                    slice.value = 0;
+                    None
+                }
                 _ => no_op(slice, event),
             })
         }
 
-        let state = make_state();
-        let reducer_output =
-            SequentialRootReducer::new((make_slice_reducer_set(), make_slice_reducer_reset()))
-                .reduce(&state, &FirstValueOrderingTest {});
+        let mut state = make_state();
+        let original = state.clone();
+        let _ = SequentialRootReducer::new((make_slice_reducer_set(), make_slice_reducer_reset()))
+            .reduce(&mut state, &FirstValueOrderingTest {});
         assert_eq!(
-            reducer_output.state,
+            state,
             ExampleState {
                 first_slice: FirstSlice { value: 0 },
-                ..state
+                ..original
             }
         );
 
-        let state = make_state();
-        let reducer_output =
-            SequentialRootReducer::new((make_slice_reducer_reset(), make_slice_reducer_set()))
-                .reduce(&state, &FirstValueOrderingTest {});
+        let mut state = make_state();
+        let original = state.clone();
+        let _ = SequentialRootReducer::new((make_slice_reducer_reset(), make_slice_reducer_set()))
+            .reduce(&mut state, &FirstValueOrderingTest {});
         assert_eq!(
-            reducer_output.state,
+            state,
             ExampleState {
                 first_slice: FirstSlice { value: 1 },
-                ..state
+                ..original
             }
         );
     }

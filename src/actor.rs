@@ -456,20 +456,15 @@ mod tests {
 
             fn reduce(
                 &self,
-                current_state: &SimpleState,
+                current_state: &mut SimpleState,
                 event: &Self::Event,
-            ) -> ReducerOutput<SimpleState, Event> {
+            ) -> ReducerOutput<Event> {
                 match event {
-                    Append { value } => ReducerOutput {
-                        state: SimpleState {
-                            name: format!("{}{}", current_state.name, *value),
-                        },
-                        side_events: None,
-                    },
-                    Recursive {} => ReducerOutput {
-                        state: current_state.clone(),
-                        side_events: Some(vec![Recursive {}]),
-                    },
+                    Append { value } => {
+                        current_state.name.push(*value);
+                        None
+                    }
+                    Recursive {} => Some(vec![Recursive {}]),
                 }
             }
         }

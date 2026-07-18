@@ -5,7 +5,6 @@
 use crate::hlist::{HCons, HNil, IntoHList};
 use crate::indices::{Here, There};
 use crate::reducer::{Reducer, ReducerOutput, SliceReducer};
-use crate::state::HasSlice;
 use crate::state::StateSlices;
 use std::marker::PhantomData;
 
@@ -30,11 +29,10 @@ use std::marker::PhantomData;
 ///
 /// # Runtime behavior
 ///
-/// Each slice reducer runs on a Rayon worker thread, taking a `&Slice`
-/// projection of the (cloned) state. Each produces a new slice and optional
-/// side events. The slices are reassembled into a new state and the side
-/// events are concatenated **in tuple declaration order** (deterministic,
-/// independent of execution order).
+/// Each slice reducer runs on a Rayon worker thread, taking a `&mut Slice`
+/// projection of the state. Each may update the slice and produce optional
+/// side events. The side events are concatenated **in tuple declaration
+/// order** (deterministic, independent of execution order).
 ///
 /// # Bounds
 ///
@@ -116,72 +114,55 @@ where
 }
 
 pub(crate) trait ApplyReducers<Reducers, S, E, Indices> {
-    fn apply(reducers: &Reducers, state: &S, event: &E) -> ReducerOutput<S, E>;
+    fn apply(&mut self, reducers: &Reducers, event: &E) -> ReducerOutput<E>;
 }
 
 /// Implementation when recursion reaches the end of the tuple of slice reducers.
-impl<Reducers, S, E> ApplyReducers<Reducers, S, E, HNil> for HNil
-where
-    S: Clone,
-{
-    fn apply(_reducers: &Reducers, state: &S, _event: &E) -> ReducerOutput<S, E> {
-        ReducerOutput {
-            state: state.clone(),
-            side_events: None,
-        }
+impl<Reducers, S, E> ApplyReducers<Reducers, S, E, HNil> for HNil {
+    fn apply(&mut self, _reducers: &Reducers, _event: &E) -> ReducerOutput<E> {
+        None
     }
 }
 
 /// Implementation when recursion continues through the tuple of slice reducers.
 impl<Reducers, HeadReducer, S, E, HeadSlice, RestSlices, Index, RestIndices>
-    ApplyReducers<Reducers, S, E, HCons<Index, RestIndices>> for HCons<HeadSlice, RestSlices>
+    ApplyReducers<Reducers, S, E, HCons<Index, RestIndices>> for HCons<&mut HeadSlice, RestSlices>
 where
     Reducers: FindReducerBySlice<HeadSlice, Index, Reducer = HeadReducer> + Sync,
     HeadReducer: SliceReducer<Slice = HeadSlice, Event = E> + Sync,
-    S: HasSlice<HeadSlice> + Clone + Send + Sync,
     E: Send + Sync,
     HeadSlice: Send + Sync,
-    RestSlices: ApplyReducers<Reducers, S, E, RestIndices>,
+    RestSlices: ApplyReducers<Reducers, S, E, RestIndices> + Send + Sync,
 {
-    fn apply(reducers: &Reducers, state: &S, event: &E) -> ReducerOutput<S, E> {
+    fn apply(&mut self, reducers: &Reducers, event: &E) -> ReducerOutput<E> {
         let reducer = reducers.find();
         let (head_output, rest_output) = rayon::join(
-            || reducer.reduce(state.slice(), event),
-            || RestSlices::apply(reducers, state, event),
+            || reducer.reduce(self.head, event),
+            || self.tail.apply(reducers, event),
         );
 
-        let new_state = rest_output.state;
-        let new_state = new_state.set_slice(head_output.state);
-
-        let mut side_events = head_output.side_events.unwrap_or_default();
-        if let Some(rest_side_events) = rest_output.side_events {
+        let mut side_events = head_output.unwrap_or_default();
+        if let Some(rest_side_events) = rest_output {
             side_events.extend(rest_side_events);
         }
 
-        ReducerOutput {
-            state: new_state,
-            side_events: if side_events.is_empty() {
-                None
-            } else {
-                Some(side_events)
-            },
+        if side_events.is_empty() {
+            None
+        } else {
+            Some(side_events)
         }
     }
 }
 
 impl<S, Reducers, E, Indices> Reducer<S> for ParallelRootReducer<Reducers, E, Indices>
 where
-    S: StateSlices + Clone,
-    S::Slices: ApplyReducers<Reducers, S, E, Indices>,
+    S: StateSlices,
+    for<'s> S::Slices<'s>: ApplyReducers<Reducers, S, E, Indices>,
 {
     type Event = E;
 
-    fn reduce(&self, state: &S, event: &Self::Event) -> ReducerOutput<S, Self::Event> {
-        <S::Slices as ApplyReducers<Reducers, S, E, Indices>>::apply(
-            &self.slice_reducers,
-            state,
-            event,
-        )
+    fn reduce(&self, state: &mut S, event: &Self::Event) -> ReducerOutput<Self::Event> {
+        state.to_slices().apply(&self.slice_reducers, event)
     }
 }
 
@@ -189,6 +170,7 @@ where
 mod tests {
     use std::time::{Duration, Instant};
 
+    use crate::IntoHList;
     use crate::fixtures::{
         ClosureSliceReducer,
         Event::{self, *},
@@ -196,10 +178,19 @@ mod tests {
         shared_tests,
     };
     use crate::sequential_root_reducer::SequentialRootReducer;
-    use crate::{HList, ParallelRootReducer, Reducer, ReducerOutput, SliceReducer, StateSlices};
+    use crate::{HList, ParallelRootReducer, Reducer, SliceReducer, StateSlices};
 
     impl StateSlices for ExampleState {
-        type Slices = HList!(FirstSlice, SecondSlice, ThirdSlice);
+        type Slices<'s> = HList!(&'s mut FirstSlice, &'s mut SecondSlice, &'s mut ThirdSlice);
+
+        fn to_slices(&mut self) -> Self::Slices<'_> {
+            (
+                &mut self.first_slice,
+                &mut self.second_slice,
+                &mut self.third_slice,
+            )
+                .into_hlist()
+        }
     }
 
     fn make_root_reducer() -> impl Reducer<ExampleState, Event = Event> {
@@ -243,56 +234,51 @@ mod tests {
             impl SliceReducer<Slice = ThirdSlice, Event = Event>,
         ) {
             (
-                ClosureSliceReducer::new(|slice: &FirstSlice, event: &Event| {
+                ClosureSliceReducer::new(|slice: &mut FirstSlice, event: &Event| {
                     std::thread::sleep(Duration::from_millis(100));
                     match event {
-                        FirstValueUpdate { value } => ReducerOutput {
-                            state: FirstSlice { value: *value },
-                            side_events: None,
-                        },
+                        FirstValueUpdate { value } => {
+                            slice.value = *value;
+                            None
+                        }
                         _ => no_op(slice, event),
                     }
                 }),
-                ClosureSliceReducer::new(|slice: &SecondSlice, event: &Event| {
+                ClosureSliceReducer::new(|slice: &mut SecondSlice, event: &Event| {
                     std::thread::sleep(Duration::from_millis(100));
                     match event {
-                        SecondValueUpdate { value } => ReducerOutput {
-                            state: SecondSlice { value: *value },
-                            side_events: None,
-                        },
+                        SecondValueUpdate { value } => {
+                            slice.value = *value;
+                            None
+                        }
                         _ => no_op(slice, event),
                     }
                 }),
-                ClosureSliceReducer::new(|slice: &ThirdSlice, event: &Event| {
+                ClosureSliceReducer::new(|slice: &mut ThirdSlice, event: &Event| {
                     std::thread::sleep(Duration::from_millis(100));
                     match event {
-                        ThirdValueUpdate { value } => ReducerOutput {
-                            state: ThirdSlice {
-                                value: value.clone(),
-                            },
-                            side_events: None,
-                        },
-                        SecondValueUpdate { value: _ } => ReducerOutput {
-                            state: slice.clone(),
-                            side_events: None,
-                        },
+                        ThirdValueUpdate { value } => {
+                            slice.value = value.clone();
+                            None
+                        }
+                        SecondValueUpdate { value: _ } => None,
                         _ => no_op(slice, event),
                     }
                 }),
             )
         }
 
-        let state = make_state();
+        let mut state = make_state();
 
         let parallel_root_reducer = ParallelRootReducer::new(make_delayed_reducer_tuple());
         let sequential_root_reducer = SequentialRootReducer::new(make_delayed_reducer_tuple());
 
         let start = Instant::now();
-        let _ = parallel_root_reducer.reduce(&state, &SecondValueUpdate { value: 1.5 });
+        let _ = parallel_root_reducer.reduce(&mut state, &SecondValueUpdate { value: 1.5 });
         let parallel_duration = start.elapsed();
 
         let start = Instant::now();
-        let _ = sequential_root_reducer.reduce(&state, &SecondValueUpdate { value: 1.5 });
+        let _ = sequential_root_reducer.reduce(&mut state, &SecondValueUpdate { value: 1.5 });
         let sequential_duration = start.elapsed();
 
         assert!(

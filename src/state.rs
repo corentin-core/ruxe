@@ -10,9 +10,7 @@ use crate::hlist::HList;
 /// can read and replace them without coupling to the concrete struct.
 pub trait HasSlice<T> {
     /// Returns a reference to the slice.
-    fn slice(&self) -> &T;
-    /// Replaces the slice with a new value, returning the updated state.
-    fn set_slice(self, slice: T) -> Self;
+    fn slice(&mut self) -> &mut T;
 }
 
 /// Declares the exhaustive list of slices a state contains.
@@ -44,5 +42,9 @@ pub trait HasSlice<T> {
 /// ```
 pub trait StateSlices {
     /// The HList of slice types this state contains, in declaration order.
-    type Slices: HList;
+    type Slices<'s>: HList
+    where
+        Self: 's;
+
+    fn to_slices(&mut self) -> Self::Slices<'_>;
 }

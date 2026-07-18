@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, thread, time::Duration};
 
-use ruxe::{HasSlice, Middleware, Next, ReducerOutput, SliceReducer, StateSlices};
+use ruxe::{HasSlice, IntoHList as _, Middleware, Next, ReducerOutput, SliceReducer, StateSlices};
 
 /// Simulated per-event work: every demo reducer blocks this long
 /// (`thread::sleep`), standing in for real CPU/IO cost. Each example's
@@ -90,51 +90,46 @@ impl Display for PlantState {
 }
 
 impl HasSlice<SolarState> for PlantState {
-    fn slice(&self) -> &SolarState {
-        &self.solar
-    }
-
-    fn set_slice(mut self, slice: SolarState) -> Self {
-        self.solar = slice;
-        self
+    fn slice(&mut self) -> &mut SolarState {
+        &mut self.solar
     }
 }
 
 impl HasSlice<BatteryState> for PlantState {
-    fn slice(&self) -> &BatteryState {
-        &self.battery
-    }
-
-    fn set_slice(mut self, slice: BatteryState) -> Self {
-        self.battery = slice;
-        self
+    fn slice(&mut self) -> &mut BatteryState {
+        &mut self.battery
     }
 }
 
 impl HasSlice<PowerMeterState> for PlantState {
-    fn slice(&self) -> &PowerMeterState {
-        &self.power_meter
-    }
-
-    fn set_slice(mut self, slice: PowerMeterState) -> Self {
-        self.power_meter = slice;
-        self
+    fn slice(&mut self) -> &mut PowerMeterState {
+        &mut self.power_meter
     }
 }
 
 impl HasSlice<System> for PlantState {
-    fn slice(&self) -> &System {
-        &self.system
-    }
-
-    fn set_slice(mut self, slice: System) -> Self {
-        self.system = slice;
-        self
+    fn slice(&mut self) -> &mut System {
+        &mut self.system
     }
 }
 
 impl StateSlices for PlantState {
-    type Slices = ruxe::HList!(SolarState, BatteryState, PowerMeterState, System);
+    type Slices<'s> = ruxe::HList!(
+        &'s mut SolarState,
+        &'s mut BatteryState,
+        &'s mut PowerMeterState,
+        &'s mut System,
+    );
+
+    fn to_slices(&mut self) -> Self::Slices<'_> {
+        (
+            &mut self.solar,
+            &mut self.battery,
+            &mut self.power_meter,
+            &mut self.system,
+        )
+            .into_hlist()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -248,30 +243,22 @@ impl SliceReducer for SolarReducer {
     type Event = Event;
     type Slice = SolarState;
 
-    fn reduce(
-        &self,
-        state: &SolarState,
-        event: &Self::Event,
-    ) -> ReducerOutput<SolarState, Self::Event> {
+    fn reduce(&self, state: &mut SolarState, event: &Self::Event) -> ReducerOutput<Self::Event> {
         thread::sleep(REDUCER_WORK_SIMULATION);
-        match event {
-            Event::SolarUpdate {
-                active_power,
-                reactive_power,
-                voltage,
-            } => ReducerOutput {
-                state: SolarState {
-                    active_power: *active_power,
-                    reactive_power: *reactive_power,
-                    voltage: *voltage,
-                },
-                side_events: None,
-            },
-            _ => ReducerOutput {
-                state: state.clone(),
-                side_events: None,
-            },
+        if let Event::SolarUpdate {
+            active_power,
+            reactive_power,
+            voltage,
+        } = event
+        {
+            *state = SolarState {
+                active_power: *active_power,
+                reactive_power: *reactive_power,
+                voltage: *voltage,
+            };
         }
+
+        None
     }
 }
 
@@ -281,11 +268,7 @@ impl SliceReducer for BatteryReducer {
     type Event = Event;
     type Slice = BatteryState;
 
-    fn reduce(
-        &self,
-        state: &BatteryState,
-        event: &Self::Event,
-    ) -> ReducerOutput<BatteryState, Self::Event> {
+    fn reduce(&self, state: &mut BatteryState, event: &Self::Event) -> ReducerOutput<Self::Event> {
         thread::sleep(REDUCER_WORK_SIMULATION);
         match event {
             Event::BatteryUpdate {
@@ -293,36 +276,23 @@ impl SliceReducer for BatteryReducer {
                 active_power,
                 reactive_power,
             } => {
-                let new_state = BatteryState {
+                *state = BatteryState {
                     state_of_charge: *state_of_charge,
                     active_power: *active_power,
                     reactive_power: *reactive_power,
                 };
 
-                let mut side_events = None;
-                if new_state.state_of_charge < 20.0 {
-                    side_events = Some(vec![Event::BatteryStateOfChargeLow]);
-                }
-                ReducerOutput {
-                    state: new_state,
-                    side_events,
-                }
+                (state.state_of_charge < 20.0).then(|| vec![Event::BatteryStateOfChargeLow])
             }
             Event::BatteryCommand {
                 active_power,
                 reactive_power,
-            } => ReducerOutput {
-                state: BatteryState {
-                    state_of_charge: state.state_of_charge,
-                    active_power: *active_power,
-                    reactive_power: *reactive_power,
-                },
-                side_events: None,
-            },
-            _ => ReducerOutput {
-                state: state.clone(),
-                side_events: None,
-            },
+            } => {
+                state.active_power = *active_power;
+                state.reactive_power = *reactive_power;
+                None
+            }
+            _ => None,
         }
     }
 }
@@ -335,28 +305,23 @@ impl SliceReducer for PowerMeterReducer {
 
     fn reduce(
         &self,
-        state: &PowerMeterState,
+        state: &mut PowerMeterState,
         event: &Self::Event,
-    ) -> ReducerOutput<PowerMeterState, Self::Event> {
+    ) -> ReducerOutput<Self::Event> {
         thread::sleep(REDUCER_WORK_SIMULATION);
-        match event {
-            Event::PowerMeterUpdate {
-                active_power,
-                reactive_power,
-                voltage,
-            } => ReducerOutput {
-                state: PowerMeterState {
-                    active_power: *active_power,
-                    reactive_power: *reactive_power,
-                    voltage: *voltage,
-                },
-                side_events: None,
-            },
-            _ => ReducerOutput {
-                state: state.clone(),
-                side_events: None,
-            },
-        }
+        if let Event::PowerMeterUpdate {
+            active_power,
+            reactive_power,
+            voltage,
+        } = event
+        {
+            *state = PowerMeterState {
+                active_power: *active_power,
+                reactive_power: *reactive_power,
+                voltage: *voltage,
+            };
+        };
+        None
     }
 }
 
@@ -366,20 +331,13 @@ impl SliceReducer for SystemReducer {
     type Event = Event;
     type Slice = System;
 
-    fn reduce(&self, state: &System, event: &Self::Event) -> ReducerOutput<System, Self::Event> {
+    fn reduce(&self, state: &mut System, event: &Self::Event) -> ReducerOutput<Self::Event> {
         thread::sleep(REDUCER_WORK_SIMULATION);
-        match event {
-            Event::Termination {} => ReducerOutput {
-                state: System {
-                    termination_requested: true,
-                },
-                side_events: None,
-            },
-            _ => ReducerOutput {
-                state: state.clone(),
-                side_events: None,
-            },
+        if let Event::Termination {} = event {
+            state.termination_requested = true;
         }
+
+        None
     }
 }
 

@@ -11,8 +11,8 @@ Existing Rust Redux implementations (redux-rs, rust_redux) lack key features: Ro
 ```rust
 use ruxe::{Reducer, ReducerOutput, Store};
 
-// 1. Define your state. (`Clone` is only needed for parallel reducers
-//    or state subscriptions, not for a synchronous store like this.)
+// 1. Define your state. (`Clone` is only needed for state subscriptions,
+// not for a synchronous store like this.)
 #[derive(Clone)]
 struct Counter {
     value: i32,
@@ -24,21 +24,19 @@ enum Event {
     Decrement,
 }
 
-// 3. A reducer is a pure `(state, event) -> new state` transformation.
+// 3. A reducer is a `(&mut state, event)` update.
 struct CounterReducer;
 
 impl Reducer<Counter> for CounterReducer {
     type Event = Event;
 
-    fn reduce(&self, state: &Counter, event: &Event) -> ReducerOutput<Counter, Event> {
-        let value = match event {
-            Event::Increment => state.value + 1,
-            Event::Decrement => state.value - 1,
+    fn reduce(&self, state: &mut Counter, event: &Event) -> ReducerOutput<Event> {
+        match event {
+            Event::Increment => state.value += 1,
+            Event::Decrement => state.value -= 1,
         };
-        ReducerOutput {
-            state: Counter { value },
-            side_events: None,
-        }
+
+        None
     }
 }
 
@@ -92,7 +90,11 @@ No runtime check, no data race possible. The compiler refuses to build a paralle
 use ruxe::{HasSlice, StateSlices};
 
 impl StateSlices for AppState {
-    type Slices = ruxe::HList!(CounterSlice, UserSlice);
+    type Slices<'s> = ruxe::HList!(&'s mut CounterSlice, &'s mut UserSlice);
+
+    fn to_slices(&mut self) -> Self::Slices<'_> {
+        (&mut self.counter, &mut self.user).into_hlist()
+    }
 }
 ```
 
@@ -158,7 +160,7 @@ flowchart LR
     User([User code]) -->|dispatch event| Store
     Store -->|"wraps in onion chain"| MW[Middleware chain]
     MW -->|"calls"| R[Reducer]
-    R -->|"new state + side events"| Store
+    R -->|"updated state + side events"| Store
 ```
 
 ### Composing slice reducers into a Reducer
@@ -189,7 +191,7 @@ Redux uses the term "action" for messages dispatched to the store. ruxe uses **e
 | Message term               | `Action`                                            | `Event`                                                     |
 | State structure            | single state; every reducer sees all of it          | isolated slices — a `SliceReducer` can only reach its slice |
 | Root composition           | one reducer combines everything by hand             | wrapped in `SequentialRootReducer` / `ParallelRootReducer`  |
-| Reducer input              | `state: State` (owned, mutate-and-return, no clone) | `state: &S` (borrowed; reducer returns a fresh state)       |
+| Reducer input              | `state: State` (owned, mutate-and-return, no clone) | `state: &mut S` (borrowed; reducer modifies in-place)       |
 | Side events in reducer     | none — reducers are pure `state → state`            | reducers may emit side events, re-dispatched by the store   |
 | Side effects in middleware | yes — re-dispatch via `inner.dispatch().await`      | yes — return side events that the store queues              |
 | Execution model            | async-native, requires Tokio                        | sync core; optional async ingestion via an actor loop       |
