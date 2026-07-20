@@ -121,10 +121,29 @@ let store = actor_loop.run().await.expect("clean shutdown");
 
 The loop is the store's **sole owner**: dispatch stays lock-free and serialized however many producers feed it, and the core stays runtime-agnostic.
 
+### Reacting to state changes
+
+`init_actor_loop_with_subscription` adds a read side. Alongside the handle and loop it returns a `Stream<Item = Arc<S>>` of state snapshots: it replays the current state on subscribe, yields the settled state after each dispatch (intermediate values coalesced), and ends when the loop stops.
+
+```rust
+use futures::StreamExt;
+use ruxe::init_actor_loop_with_subscription;
+
+let (handle, actor_loop, mut states) = init_actor_loop_with_subscription(store, 32);
+
+// React from outside the loop: an outbound sink, a controller, ...
+tokio::spawn(async move {
+    while let Some(state) = states.next().await {
+        println!("state changed: {state:?}");
+    }
+});
+```
+
+It stays opt-in: [`init_actor_loop`] and the synchronous store are unaffected, and a snapshot is cloned only while a subscriber is alive (`S: Clone` is required only on this path).
+
 Planned companions:
 
 - **[tokio adapter][i37]** — a reference executor behind a feature flag
-- **[state subscription][i35]** — react to state changes from outside the loop
 - **[event stream][i36]** — react to the dispatched events themselves (`action$`-style)
 
 Runnable demo: [`examples/async_dispatch.rs`](examples/async_dispatch.rs).
@@ -196,7 +215,7 @@ In short: redux-rs is async-first and ships more batteries (selectors, Tokio int
 | 2       | [Benchmarks][i9]                   | planned |
 | 3       | [Async dispatch (actor loop)][i23] | done    |
 | 3       | [tokio adapter][i37]               | planned |
-| 3       | [State-change subscription][i35]   | planned |
+| 3       | [State-change subscription][i35]   | done    |
 | 3       | [Event-stream subscription][i36]   | planned |
 
 [i2]: https://github.com/corentin-core/ruxe/issues/2
