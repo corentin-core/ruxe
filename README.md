@@ -4,7 +4,7 @@
 
 ## Why ruxe?
 
-Existing Rust Redux implementations (redux-rs, rust_redux) lack key features: RootReducer, SliceReducer, and parallel execution. ruxe fills that gap by leveraging Rust's ownership model — not as a constraint, but as a feature — to guarantee data-race-free parallel reducers at compile time.
+Existing Rust Redux implementations (redux-rs, rust_redux) lack key features: RootReducer, SliceReducer, and parallel execution. ruxe fills that gap by using Rust's ownership model to guarantee data-race-free parallel reducers at compile time.
 
 ## Quick start
 
@@ -242,7 +242,7 @@ See [the project epic](https://github.com/corentin-core/ruxe/issues/1) for the f
 
 ruxe is built as a Rust learning project. The code is written by hand — Claude Code is configured in **learning mode**: it reviews, challenges, and explains, but does not write implementation code.
 
-The Claude configuration showcasing this workflow is tracked in the repo:
+The Claude configuration for this workflow is tracked in the repo:
 
 - [`CLAUDE.md`](CLAUDE.md) — project instructions and learning workflow
 - [`.claude/rules/learning-mode.md`](.claude/rules/learning-mode.md) — behavioral constraints (what Claude does and doesn't do)
