@@ -2,11 +2,12 @@
 //! pipeline. Complements unit tests by validating the cross-component flow.
 
 use futures::executor::block_on;
-use futures::join;
+use futures::{StreamExt, join};
 use ruxe::{
     HasSlice, Middleware, Next, ParallelRootReducer, ReducerOutput, SequentialRootReducer,
-    SliceReducer, StateSlices, Store, init_actor_loop,
+    SliceReducer, StateSlices, Store, init_actor_loop, init_actor_loop_with_subscription,
 };
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, PartialEq)]
 struct CountSlice {
@@ -110,7 +111,7 @@ fn initial_state() -> AppState {
 /// A middleware that records every event it observes — used to verify the
 /// dispatch chain flows through middleware as expected.
 struct Recorder {
-    log: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    log: Arc<Mutex<Vec<String>>>,
 }
 
 impl Middleware<AppState, Event> for Recorder {
@@ -163,7 +164,7 @@ fn parallel_root_reducer_via_store() {
 
 #[test]
 fn parallel_root_reducer_emits_side_events_through_store() {
-    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = Arc::new(Mutex::new(Vec::new()));
     let recorder = Recorder { log: log.clone() };
 
     let mut store = Store::new(
@@ -181,7 +182,7 @@ fn parallel_root_reducer_emits_side_events_through_store() {
 
 #[test]
 fn actor_loop_integration() {
-    let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = Arc::new(Mutex::new(Vec::new()));
     let recorder = Recorder { log: log.clone() };
 
     let store = Store::new(
@@ -231,6 +232,80 @@ fn actor_loop_integration() {
     assert!(log.contains(&"Pong".to_string()));
     assert!(log.contains(&"Increment".to_string()));
     assert!(log.contains(&"SetLabel(\"done\")".to_string()));
+
+    assert_eq!(
+        store.state(),
+        &AppState {
+            count: CountSlice { value: 1 },
+            label: LabelSlice {
+                text: String::from("done"),
+            },
+        }
+    );
+}
+
+#[test]
+fn actor_loop_with_subscription_integration() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+
+    let store = Store::new(
+        initial_state(),
+        ParallelRootReducer::new((CountReducer, LabelReducer)),
+        vec![],
+        10,
+    );
+
+    let (handle, actor_loop, mut listener) = init_actor_loop_with_subscription(store, 10);
+    let mut handle1 = handle.clone();
+    let dispatch_future_1 = async move {
+        handle1
+            .dispatch(Event::Ping)
+            .await
+            .expect("Dispatch should succeed");
+    };
+    let mut handle2 = handle.clone();
+    let dispatch_future_2 = async move {
+        handle2
+            .dispatch(Event::Increment)
+            .await
+            .expect("Dispatch should succeed");
+    };
+    let mut handle3 = handle.clone();
+    let dispatch_future_3 = async move {
+        handle3
+            .dispatch(Event::SetLabel(String::from("done")))
+            .await
+            .expect("Dispatch should succeed");
+    };
+    let log_clone = log.clone();
+    let listener_future = async move {
+        while let Some(state) = listener.next().await {
+            log_clone.lock().unwrap().push((*state).clone());
+        }
+    };
+    drop(handle); // Drop the original handle to avoid deadlock in the actor loop
+    let store = block_on(async {
+        let (_, _, _, _, loop_result) = join!(
+            listener_future,
+            dispatch_future_1,
+            dispatch_future_2,
+            dispatch_future_3,
+            actor_loop.run(),
+        );
+        loop_result.expect("Actor loop should complete successfully")
+    });
+
+    let log = log.lock().unwrap();
+
+    let expected_final_state = AppState {
+        count: CountSlice { value: 1 },
+        label: LabelSlice {
+            text: "done".to_string(),
+        },
+    };
+
+    assert_eq!(log.first(), Some(&initial_state()));
+    assert_eq!(log.last(), Some(&expected_final_state));
 
     assert_eq!(
         store.state(),

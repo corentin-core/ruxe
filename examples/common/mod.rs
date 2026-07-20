@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{fmt::Display, thread, time::Duration};
 
 use ruxe::{HasSlice, Middleware, Next, ReducerOutput, SliceReducer, StateSlices};
@@ -9,9 +11,9 @@ const REDUCER_WORK_SIMULATION: Duration = Duration::from_millis(50);
 
 #[derive(Clone)]
 pub struct SolarState {
-    active_power: f64,
-    reactive_power: f64,
-    voltage: f64,
+    pub active_power: f64,
+    pub reactive_power: f64,
+    pub voltage: f64,
 }
 
 impl Display for SolarState {
@@ -26,9 +28,9 @@ impl Display for SolarState {
 
 #[derive(Clone)]
 pub struct BatteryState {
-    state_of_charge: f64,
-    active_power: f64,
-    reactive_power: f64,
+    pub state_of_charge: f64,
+    pub active_power: f64,
+    pub reactive_power: f64,
 }
 
 impl Display for BatteryState {
@@ -43,9 +45,9 @@ impl Display for BatteryState {
 
 #[derive(Clone)]
 pub struct PowerMeterState {
-    active_power: f64,
-    reactive_power: f64,
-    voltage: f64,
+    pub active_power: f64,
+    pub reactive_power: f64,
+    pub voltage: f64,
 }
 
 impl Display for PowerMeterState {
@@ -59,18 +61,30 @@ impl Display for PowerMeterState {
 }
 
 #[derive(Clone)]
+pub struct System {
+    pub termination_requested: bool,
+}
+
+impl Display for System {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Termination requested: {}", self.termination_requested)
+    }
+}
+
+#[derive(Clone)]
 pub struct PlantState {
-    solar: SolarState,
-    battery: BatteryState,
-    power_meter: PowerMeterState,
+    pub solar: SolarState,
+    pub battery: BatteryState,
+    pub power_meter: PowerMeterState,
+    pub system: System,
 }
 
 impl Display for PlantState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Solar: {}, Battery: {}, Power Meter: {}",
-            self.solar, self.battery, self.power_meter
+            "Solar: {}, Battery: {}, Power Meter: {}, System: {}",
+            self.solar, self.battery, self.power_meter, self.system
         )
     }
 }
@@ -108,8 +122,19 @@ impl HasSlice<PowerMeterState> for PlantState {
     }
 }
 
+impl HasSlice<System> for PlantState {
+    fn slice(&self) -> &System {
+        &self.system
+    }
+
+    fn set_slice(mut self, slice: System) -> Self {
+        self.system = slice;
+        self
+    }
+}
+
 impl StateSlices for PlantState {
-    type Slices = ruxe::HList!(SolarState, BatteryState, PowerMeterState);
+    type Slices = ruxe::HList!(SolarState, BatteryState, PowerMeterState, System);
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +159,7 @@ pub enum Event {
         active_power: f64,
         reactive_power: f64,
     },
+    Termination {},
 }
 
 impl Display for Event {
@@ -175,6 +201,7 @@ impl Display for Event {
                 "BatteryCommand: {:.1}W, {:.1}VAR",
                 active_power, reactive_power
             ),
+            Event::Termination {} => write!(f, "Termination"),
         }
     }
 }
@@ -333,6 +360,29 @@ impl SliceReducer for PowerMeterReducer {
     }
 }
 
+pub struct SystemReducer;
+
+impl SliceReducer for SystemReducer {
+    type Event = Event;
+    type Slice = System;
+
+    fn reduce(&self, state: &System, event: &Self::Event) -> ReducerOutput<System, Self::Event> {
+        thread::sleep(REDUCER_WORK_SIMULATION);
+        match event {
+            Event::Termination {} => ReducerOutput {
+                state: System {
+                    termination_requested: true,
+                },
+                side_events: None,
+            },
+            _ => ReducerOutput {
+                state: state.clone(),
+                side_events: None,
+            },
+        }
+    }
+}
+
 pub fn initial_state() -> PlantState {
     PlantState {
         solar: SolarState {
@@ -349,6 +399,9 @@ pub fn initial_state() -> PlantState {
             active_power: 0.0,
             reactive_power: 0.0,
             voltage: 0.0,
+        },
+        system: System {
+            termination_requested: false,
         },
     }
 }

@@ -4,12 +4,14 @@
 //! [`ActorLoop`] that owns the store and serializes every dispatch. The send
 //! error types live here too.
 
+use crate::watch;
 use crate::{DispatchError, Store};
-use futures::StreamExt;
 use futures::channel::mpsc::{Receiver, Sender};
 use futures::future::poll_fn;
+use futures::{Stream, StreamExt};
 use std::error::Error;
 use std::fmt::{Debug, Display};
+use std::sync::Arc;
 
 /// The bounded channel had no spare capacity — transient, a later attempt
 /// may succeed. Carries the rejected event ([`Self::into_inner`]).
@@ -147,16 +149,64 @@ impl<E> DispatchHandle<E> {
     }
 }
 
-/// Sole owner of a [`Store`]: drains the channel and dispatches each event
-/// serially — no locks, no other task ever touches the state.
-///
-/// Created by [`init_actor_loop`]; driven by [`run`](ActorLoop::run).
-pub struct ActorLoop<S, E> {
-    store: Store<S, E>,
-    receiver: Receiver<E>,
+///  Sealed trait pattern to prevent downstream crates to implement Publish trait
+mod sealed {
+    pub trait Sealed {}
 }
 
-impl<S, E> ActorLoop<S, E> {
+/// State-publication policy for [`ActorLoop`]. Sealed, so only [`NoPublish`]
+/// (the default no-op) and [`WatchPublish`] implement it.
+#[doc(hidden)]
+pub trait Publish<S>: sealed::Sealed {
+    fn publish(&self, state: &S);
+
+    fn has_receivers(&self) -> bool;
+}
+
+#[doc(hidden)]
+pub struct NoPublish {
+    // This is a private field to prevent instantiation outside of this module
+    _private: (),
+}
+impl<S> Publish<S> for NoPublish {
+    fn publish(&self, _: &S) {}
+
+    fn has_receivers(&self) -> bool {
+        false
+    }
+}
+
+impl sealed::Sealed for NoPublish {}
+
+#[doc(hidden)]
+pub struct WatchPublish<S> {
+    publisher: watch::Sender<Arc<S>>,
+}
+
+impl<S> sealed::Sealed for WatchPublish<S> {}
+
+impl<S: Clone> Publish<S> for WatchPublish<S> {
+    fn publish(&self, state: &S) {
+        self.publisher.send(Arc::new(state.clone()));
+    }
+
+    fn has_receivers(&self) -> bool {
+        self.publisher.has_receivers()
+    }
+}
+
+/// Sole owner of a [`Store`]: drains the channel and dispatches each event
+/// serially, lock-free, so no other task ever touches the state.
+///
+/// Created by [`init_actor_loop`]; driven by [`run`](ActorLoop::run). The `P`
+/// parameter selects the publication policy, [`NoPublish`] by default.
+pub struct ActorLoop<S, E, P: Publish<S> = NoPublish> {
+    store: Store<S, E>,
+    receiver: Receiver<E>,
+    publisher: P,
+}
+
+impl<S, E, P: Publish<S>> ActorLoop<S, E, P> {
     /// Drives the store until every [`DispatchHandle`] is dropped, then
     /// returns it.
     ///
@@ -169,7 +219,10 @@ impl<S, E> ActorLoop<S, E> {
     /// `tokio::spawn`ed.
     pub async fn run(mut self) -> Result<Store<S, E>, DispatchError> {
         while let Some(event) = self.receiver.next().await {
-            self.store.dispatch(event)?
+            self.store.dispatch(event)?;
+            if self.publisher.has_receivers() {
+                self.publisher.publish(self.store.state());
+            }
         }
         Ok(self.store)
     }
@@ -203,8 +256,47 @@ pub fn init_actor_loop<S, E>(
 ) -> (DispatchHandle<E>, ActorLoop<S, E>) {
     let (sender, receiver) = futures::channel::mpsc::channel(max_event_buffer);
     let handle = DispatchHandle { sender };
-    let actor_loop = ActorLoop { store, receiver };
+    let actor_loop = ActorLoop {
+        store,
+        receiver,
+        publisher: NoPublish { _private: () },
+    };
     (handle, actor_loop)
+}
+
+type PublishingActorLoop<S, E> = ActorLoop<S, E, WatchPublish<S>>;
+
+/// Like [`init_actor_loop`], with a state-change subscription added.
+///
+/// Also returns a `Stream<Item = Arc<S>>` yielding a state snapshot after each
+/// dispatch, once the side-event cascade has settled. The stream replays the
+/// current state on subscribe, coalesces intermediate values, and ends when
+/// the loop stops.
+///
+/// `S: Clone` is required only here; [`init_actor_loop`] and the synchronous
+/// store stay unaffected. A snapshot is cloned only while a subscriber is
+/// alive, so dropping the listener lets the loop skip the clone.
+#[must_use = "dropping the returned loop or listener discards the subscription; drive the loop with run()"]
+pub fn init_actor_loop_with_subscription<S, E>(
+    store: Store<S, E>,
+    max_event_buffer: usize,
+) -> (
+    DispatchHandle<E>,
+    PublishingActorLoop<S, E>,
+    impl Stream<Item = Arc<S>> + Clone,
+)
+where
+    S: Clone,
+{
+    let (sender, receiver) = futures::channel::mpsc::channel(max_event_buffer);
+    let handle = DispatchHandle { sender };
+    let (publisher, listener) = watch::watch(Arc::new(store.state().clone()));
+    let actor_loop = ActorLoop {
+        store,
+        receiver,
+        publisher: WatchPublish { publisher },
+    };
+    (handle, actor_loop, listener)
 }
 
 #[cfg(test)]
@@ -342,7 +434,7 @@ mod tests {
 
     mod actor_loop {
         use crate::{DispatchError, Reducer, ReducerOutput, Store, init_actor_loop};
-        use futures::executor::block_on;
+        use futures::{StreamExt, executor::block_on, join};
 
         use Event::*;
 
@@ -442,6 +534,63 @@ mod tests {
                 Ok(_) => panic!("Actor loop should have failed due to max recursion depth"),
                 Err(err) => assert_eq!(err, DispatchError::MaxDepthExceeded { depth: 10, max: 10 }),
             }
+        }
+
+        #[test]
+        fn actor_loop_with_subscription() {
+            let store = make_store();
+            let (mut handle, actor_loop, mut listener) =
+                crate::actor::init_actor_loop_with_subscription(store, 10);
+            let (_, result) = block_on(async {
+                join!(
+                    async {
+                        assert_eq!(
+                            listener
+                                .next()
+                                .await
+                                .expect("A state should be received")
+                                .name,
+                            ""
+                        );
+                        handle
+                            .try_dispatch(Append { value: 'a' })
+                            .expect("Dispatch should succeed");
+                        assert_eq!(
+                            listener
+                                .next()
+                                .await
+                                .expect("A state should be received")
+                                .name,
+                            "a"
+                        );
+                        handle
+                            .try_dispatch(Append { value: 'b' })
+                            .expect("Dispatch should succeed");
+                        assert_eq!(
+                            listener
+                                .next()
+                                .await
+                                .expect("A state should be received")
+                                .name,
+                            "ab"
+                        );
+                        handle
+                            .try_dispatch(Append { value: 'c' })
+                            .expect("Dispatch should succeed");
+                        assert_eq!(
+                            listener
+                                .next()
+                                .await
+                                .expect("A state should be received")
+                                .name,
+                            "abc"
+                        );
+                        drop(handle);
+                    },
+                    actor_loop.run()
+                )
+            });
+            result.expect("Actor loop should run successfully");
         }
     }
 }
