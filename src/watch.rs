@@ -340,8 +340,14 @@ mod tests {
             sender.send(1);
         });
         block_on(async {
-            assert_eq!(receiver.next().await, Some(0));
-            assert_eq!(receiver.next().await, Some(1));
+            // The initial 0 may be coalesced away if the send wins the race;
+            // the level-triggered guarantee is that the last observed value is
+            // the latest one sent.
+            let mut last = None;
+            while let Some(v) = receiver.next().await {
+                last = Some(v);
+            }
+            assert_eq!(last, Some(1));
         });
         sender_thread.join().unwrap();
     }
