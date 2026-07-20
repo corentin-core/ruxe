@@ -11,7 +11,8 @@ Existing Rust Redux implementations (redux-rs, rust_redux) lack key features: Ro
 ```rust
 use ruxe::{Reducer, ReducerOutput, Store};
 
-// 1. Define your state. It must be `Clone`.
+// 1. Define your state. (`Clone` is only needed for parallel reducers
+//    or state subscriptions, not for a synchronous store like this.)
 #[derive(Clone)]
 struct Counter {
     value: i32,
@@ -169,8 +170,6 @@ flowchart TB
 
     State[State struct] -.must impl HasSlice&lt;T&gt; per slice.-> SR1
     ParRR[ParallelRootReducer only] -.requires.-> SS[StateSlices on State]
-
-    style Wrapper fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
 Slice reducers compose into a root reducer via either [`SequentialRootReducer<T>`] (applies them in order, threading state through `set_slice`) or [`ParallelRootReducer<L, E, Indices>`] (applies them on Rayon workers, with compile-time disjointness verification). `Next<S, E>` is the dispatch-chain closure each middleware wraps, and `DispatchError` is returned when side-event recursion exceeds the configured depth.
