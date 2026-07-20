@@ -17,8 +17,9 @@ mod reducer;
 mod sequential_root_reducer;
 mod state;
 mod store;
+mod watch;
 
-pub use actor::{ActorLoop, DispatchHandle, init_actor_loop};
+pub use actor::{ActorLoop, DispatchHandle, init_actor_loop, init_actor_loop_with_subscription};
 #[doc(hidden)]
 pub use hlist::{HCons, HList, HNil, IntoHList};
 #[doc(hidden)]

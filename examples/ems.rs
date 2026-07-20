@@ -89,6 +89,7 @@ fn main() {
         SolarReducer,
         BatteryReducer,
         PowerMeterReducer,
+        SystemReducer,
     )));
 
     println!("\n=== EMS Example — Parallel ===\n");
@@ -96,6 +97,7 @@ fn main() {
         SolarReducer,
         BatteryReducer,
         PowerMeterReducer,
+        SystemReducer,
     )));
 
     println!("\n=== Timing comparison ===");

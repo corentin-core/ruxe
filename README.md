@@ -4,14 +4,15 @@
 
 ## Why ruxe?
 
-Existing Rust Redux implementations (redux-rs, rust_redux) lack key features: RootReducer, SliceReducer, and parallel execution. ruxe fills that gap by leveraging Rust's ownership model — not as a constraint, but as a feature — to guarantee data-race-free parallel reducers at compile time.
+Existing Rust Redux implementations (redux-rs, rust_redux) lack key features: RootReducer, SliceReducer, and parallel execution. ruxe fills that gap by using Rust's ownership model to guarantee data-race-free parallel reducers at compile time.
 
 ## Quick start
 
 ```rust
 use ruxe::{Reducer, ReducerOutput, Store};
 
-// 1. Define your state. It must be `Clone`.
+// 1. Define your state. (`Clone` is only needed for parallel reducers
+//    or state subscriptions, not for a synchronous store like this.)
 #[derive(Clone)]
 struct Counter {
     value: i32,
@@ -121,10 +122,29 @@ let store = actor_loop.run().await.expect("clean shutdown");
 
 The loop is the store's **sole owner**: dispatch stays lock-free and serialized however many producers feed it, and the core stays runtime-agnostic.
 
+### Reacting to state changes
+
+`init_actor_loop_with_subscription` adds a read side. Alongside the handle and loop it returns a `Stream<Item = Arc<S>>` of state snapshots: it replays the current state on subscribe, yields the settled state after each dispatch (intermediate values coalesced), and ends when the loop stops.
+
+```rust
+use futures::StreamExt;
+use ruxe::init_actor_loop_with_subscription;
+
+let (handle, actor_loop, mut states) = init_actor_loop_with_subscription(store, 32);
+
+// React from outside the loop: an outbound sink, a controller, ...
+tokio::spawn(async move {
+    while let Some(state) = states.next().await {
+        println!("state changed: {state:?}");
+    }
+});
+```
+
+It stays opt-in: [`init_actor_loop`] and the synchronous store are unaffected, and a snapshot is cloned only while a subscriber is alive (`S: Clone` is required only on this path).
+
 Planned companions:
 
 - **[tokio adapter][i37]** — a reference executor behind a feature flag
-- **[state subscription][i35]** — react to state changes from outside the loop
 - **[event stream][i36]** — react to the dispatched events themselves (`action$`-style)
 
 Runnable demo: [`examples/async_dispatch.rs`](examples/async_dispatch.rs).
@@ -150,8 +170,6 @@ flowchart TB
 
     State[State struct] -.must impl HasSlice&lt;T&gt; per slice.-> SR1
     ParRR[ParallelRootReducer only] -.requires.-> SS[StateSlices on State]
-
-    style Wrapper fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
 Slice reducers compose into a root reducer via either [`SequentialRootReducer<T>`] (applies them in order, threading state through `set_slice`) or [`ParallelRootReducer<L, E, Indices>`] (applies them on Rayon workers, with compile-time disjointness verification). `Next<S, E>` is the dispatch-chain closure each middleware wraps, and `DispatchError` is returned when side-event recursion exceeds the configured depth.
@@ -196,7 +214,7 @@ In short: redux-rs is async-first and ships more batteries (selectors, Tokio int
 | 2       | [Benchmarks][i9]                   | planned |
 | 3       | [Async dispatch (actor loop)][i23] | done    |
 | 3       | [tokio adapter][i37]               | planned |
-| 3       | [State-change subscription][i35]   | planned |
+| 3       | [State-change subscription][i35]   | done    |
 | 3       | [Event-stream subscription][i36]   | planned |
 
 [i2]: https://github.com/corentin-core/ruxe/issues/2
@@ -224,7 +242,7 @@ See [the project epic](https://github.com/corentin-core/ruxe/issues/1) for the f
 
 ruxe is built as a Rust learning project. The code is written by hand — Claude Code is configured in **learning mode**: it reviews, challenges, and explains, but does not write implementation code.
 
-The Claude configuration showcasing this workflow is tracked in the repo:
+The Claude configuration for this workflow is tracked in the repo:
 
 - [`CLAUDE.md`](CLAUDE.md) — project instructions and learning workflow
 - [`.claude/rules/learning-mode.md`](.claude/rules/learning-mode.md) — behavioral constraints (what Claude does and doesn't do)

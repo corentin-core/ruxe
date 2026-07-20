@@ -1,33 +1,84 @@
-//! Async event ingestion — concurrent producers feeding one actor-driven store.
+//! Async event ingestion: concurrent producers feeding one actor-driven store,
+//! plus a controller reacting to state changes.
 //!
 //! Reuses the EMS domain from `common` (see `examples/ems.rs` for the domain
-//! walkthrough) and demonstrates the async dispatch primitive:
+//! walkthrough) and demonstrates the async dispatch and subscription primitives:
 //!
-//! - `init_actor_loop` wraps the `Store` in an actor loop — the sole owner
-//!   of the state
+//! - `init_actor_loop_with_subscription` wraps the `Store` in an actor loop
+//!   (the sole owner of the state) and returns a state `Stream`
 //! - Three tokio tasks dispatch device updates concurrently through cloned,
-//!   `Send` `DispatchHandle`s; the loop serializes them into one ordered
-//!   stream of dispatches, lock-free
-//! - Shutdown is cooperative: producers finish and drop their handles, the
-//!   loop drains the channel, then `run()` returns the final `Store`
+//!   `Send` `DispatchHandle`s; the loop serializes them lock-free
+//! - A `SolarController` task reacts to state changes from the `Stream` and
+//!   dispatches commands back through its own handle, closing the
+//!   react-to-state loop
+//! - Shutdown is cooperative: a `Termination` event flips a state flag the
+//!   controller observes, so it stops and drops its handle. Once every handle
+//!   is gone, the loop drains the channel and `run()` returns the final `Store`
 //!
 //! Caveat: the demo reducers block 50ms per event (`REDUCER_WORK_SIMULATION`),
 //! and that work runs *inside the actor loop*, on the tokio task awaiting
-//! `run()` — acceptable for a demo, an antipattern in real async code.
+//! `run()`. Fine for a demo, an antipattern in real async code.
 //!
 //! Run with: `cargo run --example async_dispatch`
 
 mod common;
 
-use ruxe::{ParallelRootReducer, Store, init_actor_loop};
-
 use crate::common::*;
+use futures::Stream;
+use futures::StreamExt;
+use ruxe::{DispatchHandle, ParallelRootReducer, Store, init_actor_loop_with_subscription};
+use std::sync::Arc;
+
+struct SolarController<Listener: Stream<Item = Arc<PlantState>> + Unpin> {
+    dispatch_handle: DispatchHandle<Event>,
+    state_listener: Listener,
+}
+
+impl<Listener> SolarController<Listener>
+where
+    Listener: Stream<Item = Arc<PlantState>> + Unpin,
+{
+    async fn run(mut self) {
+        while let Some(state) = self.state_listener.next().await {
+            if state.system.termination_requested {
+                println!("Termination requested. Stopping SolarController.");
+                break;
+            }
+
+            if state.battery.active_power == 0.0 && state.solar.active_power > 0.0 {
+                println!("Battery stopped, stopping solar power generation.");
+                if self
+                    .dispatch_handle
+                    .dispatch(Event::SolarUpdate {
+                        active_power: 0.0,
+                        reactive_power: 0.0,
+                        voltage: 0.0,
+                    })
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
-    let root_reducer = ParallelRootReducer::new((SolarReducer, BatteryReducer, PowerMeterReducer));
+    let root_reducer = ParallelRootReducer::new((
+        SystemReducer,
+        SolarReducer,
+        BatteryReducer,
+        PowerMeterReducer,
+    ));
     let store = Store::new(initial_state(), root_reducer, middlewares(), 10);
-    let (handle, actor_loop) = init_actor_loop(store, 10);
+    let (handle, actor_loop, listener) = init_actor_loop_with_subscription(store, 10);
+
+    let solar_controller = SolarController {
+        dispatch_handle: handle.clone(),
+        state_listener: listener,
+    };
 
     let mut solar_handle = handle.clone();
     // Create tokio tasks sending device state updates periodically to the store. The store will process these updates concurrently.
@@ -75,9 +126,24 @@ async fn main() {
         }
     });
 
+    let mut termination_handle = handle.clone();
+    let termination_task = tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        termination_handle
+            .dispatch(Event::Termination {})
+            .await
+            .expect("Termination signal should be sent");
+    });
+
     drop(handle); // Close the sender to stop the actor loop after processing the events
-    let (_, _, _, result) =
-        tokio::join!(solar_task, power_meter_task, battery_task, actor_loop.run());
+    let (_, _, _, _, _, result) = tokio::join!(
+        termination_task,
+        solar_controller.run(),
+        solar_task,
+        power_meter_task,
+        battery_task,
+        actor_loop.run()
+    );
     let store = result.expect("Actor loop should complete successfully");
     println!("Final state: {}", store.state());
 }
