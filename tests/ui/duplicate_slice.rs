@@ -68,9 +68,9 @@ fn main() {
             match event {
                 MyEvent::UpdateFirst(v) => {
                     slice.value = v.value;
-                    None
+                    vec![]
                 }
-                _ => None,
+                _ => vec![],
             }
         }
     }
@@ -85,9 +85,9 @@ fn main() {
             match event {
                 MyEvent::UpdateSecond(v) => {
                     slice.value = v.value;
-                    None
+                    vec![]
                 }
-                _ => None,
+                _ => vec![],
             }
         }
     }

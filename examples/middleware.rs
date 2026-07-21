@@ -48,11 +48,11 @@ impl Reducer<State> for CounterReducer {
         match event {
             Event::Increment {} => {
                 state.value += 1;
-                None
+                vec![]
             }
             Event::Decrement {} => {
                 state.value -= 1;
-                None
+                vec![]
             }
         }
     }

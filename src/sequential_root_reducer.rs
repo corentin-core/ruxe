@@ -63,12 +63,10 @@ macro_rules! impl_sequential_reducer_tuple {
 
                 $(
                     let new_side_events = self.reducers.$idx.reduce(state.slice(), event);
-                    if let Some(events) = new_side_events {
-                        side_events.extend(events);
-                    }
+                    side_events.extend(new_side_events);
                 )+
 
-                if side_events.is_empty() { None } else { Some(side_events) }
+                side_events
             }
         }
     };
@@ -135,7 +133,7 @@ mod tests {
             ClosureSliceReducer::new(|slice: &mut FirstSlice, event: &Event| match event {
                 FirstValueOrderingTest {} => {
                     slice.value = 1;
-                    None
+                    vec![]
                 }
                 _ => no_op(slice, event),
             })
@@ -145,7 +143,7 @@ mod tests {
             ClosureSliceReducer::new(|slice: &mut FirstSlice, event: &Event| match event {
                 FirstValueOrderingTest {} => {
                     slice.value = 0;
-                    None
+                    vec![]
                 }
                 _ => no_op(slice, event),
             })

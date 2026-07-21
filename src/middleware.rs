@@ -26,7 +26,7 @@
 ///
 /// Mutates state in place and returns any side events. Code running after
 /// `next` returns observes the updated state.
-pub type Next<S, E> = Box<dyn FnMut(&mut S, E) -> Option<Vec<E>>>;
+pub type Next<S, E> = Box<dyn FnMut(&mut S, E) -> Vec<E>>;
 
 /// A wrapper around the dispatch chain.
 ///

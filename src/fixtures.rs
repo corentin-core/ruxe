@@ -27,7 +27,7 @@ where
 }
 
 pub(crate) fn no_op<S, E>(_: &mut S, _: &E) -> ReducerOutput<E> {
-    None
+    vec![]
 }
 
 macro_rules! init_sliced_state {
@@ -146,7 +146,7 @@ pub(crate) mod shared_tests {
     ) {
         let mut state = make_state();
         let reducer_output = root_reducer.reduce(&mut state, &FirstValueUpdate { value: 2 });
-        assert_eq!(reducer_output, None);
+        assert!(reducer_output.is_empty());
     }
 
     pub(crate) fn aggregates_side_events_in_tuple_order<R: Reducer<ExampleState, Event = Event>>(
@@ -154,7 +154,7 @@ pub(crate) mod shared_tests {
     ) {
         let mut state = make_state();
         let reducer_output = root_reducer.reduce(&mut state, &SecondValueUpdate { value: 1.5 });
-        assert_eq!(reducer_output, Some(vec![SideEvent1 {}, SideEvent2 {}]))
+        assert_eq!(reducer_output, vec![SideEvent1 {}, SideEvent2 {}])
     }
 }
 
@@ -167,23 +167,23 @@ pub(crate) fn make_reducer_tuple() -> (
         ClosureSliceReducer::new(|slice: &mut FirstSlice, event: &Event| match event {
             FirstValueUpdate { value } => {
                 slice.value = *value;
-                None
+                vec![]
             }
             _ => no_op(slice, event),
         }),
         ClosureSliceReducer::new(|slice: &mut SecondSlice, event: &Event| match event {
             SecondValueUpdate { value } => {
                 slice.value = *value;
-                Some(vec![SideEvent1 {}])
+                vec![SideEvent1 {}]
             }
             _ => no_op(slice, event),
         }),
         ClosureSliceReducer::new(|slice: &mut ThirdSlice, event: &Event| match event {
             ThirdValueUpdate { value } => {
                 slice.value = value.clone();
-                None
+                vec![]
             }
-            SecondValueUpdate { value: _ } => Some(vec![SideEvent2 {}]),
+            SecondValueUpdate { value: _ } => vec![SideEvent2 {}],
             _ => no_op(slice, event),
         }),
     )

@@ -13,7 +13,7 @@ use std::fmt::Display;
 pub enum DispatchError {
     /// Side-event recursion exceeded `max_depth`.
     MaxDepthExceeded {
-        /// Depth at which the offending event was produced (0 = original dispatch).
+        /// Depth the refused side events would have occupied; always `max_depth + 1`.
         depth: usize,
         /// The configured `max_depth` limit passed to [`Store::new`].
         max: usize,
@@ -25,7 +25,7 @@ impl Display for DispatchError {
         match self {
             DispatchError::MaxDepthExceeded { depth, max } => write!(
                 f,
-                "Side-event recursion limit reached: event at depth {} emitted side events (max_depth = {})",
+                "Side-event recursion would reach depth {}, exceeding max_depth ({})",
                 depth, max
             ),
         }
@@ -71,9 +71,8 @@ impl<S, E> Store<S, E> {
         S: 'static,
         E: 'static,
     {
-        let base = Box::new(move |state: &mut S, event: E| -> Option<Vec<E>> {
-            reducer.reduce(state, &event)
-        });
+        let base =
+            Box::new(move |state: &mut S, event: E| -> Vec<E> { reducer.reduce(state, &event) });
         Store {
             state,
             chain: middlewares
@@ -105,23 +104,24 @@ impl<S, E> Store<S, E> {
 
     fn queue_side_events(
         &mut self,
-        events: Option<Vec<E>>,
+        events: Vec<E>,
         current_depth: usize,
     ) -> Result<(), DispatchError> {
-        if let Some(events) = events {
-            if current_depth >= self.max_depth {
-                return Err(DispatchError::MaxDepthExceeded {
-                    depth: current_depth,
-                    max: self.max_depth,
-                });
-            }
+        if events.is_empty() {
+            return Ok(());
+        }
+        if current_depth >= self.max_depth {
+            return Err(DispatchError::MaxDepthExceeded {
+                depth: current_depth + 1,
+                max: self.max_depth,
+            });
+        }
 
-            for event in events {
-                self.queue.push_back(PendingEvent {
-                    event,
-                    depth: current_depth + 1,
-                })
-            }
+        for event in events {
+            self.queue.push_back(PendingEvent {
+                event,
+                depth: current_depth + 1,
+            })
         }
         Ok(())
     }
@@ -163,16 +163,16 @@ mod tests {
                 match event {
                     FirstValueUpdate { value } => {
                         state.first_value = *value;
-                        None
+                        vec![]
                     }
                     SecondValueUpdate { value } => {
                         state.second_value = *value;
-                        None
+                        vec![]
                     }
-                    EmitSide {} => Some(vec![SecondValueUpdate { value: 2 }, IgnoredUpdate {}]),
-                    EmitNestedSide {} => Some(vec![EmitSide {}, FirstValueUpdate { value: 2.0 }]),
-                    EmitSelfRecursive {} => Some(vec![EmitSelfRecursive {}]),
-                    _ => None,
+                    EmitSide {} => vec![SecondValueUpdate { value: 2 }, IgnoredUpdate {}],
+                    EmitNestedSide {} => vec![EmitSide {}, FirstValueUpdate { value: 2.0 }],
+                    EmitSelfRecursive {} => vec![EmitSelfRecursive {}],
+                    _ => vec![],
                 }
             }
         }
@@ -298,7 +298,7 @@ mod tests {
             let err = store
                 .dispatch(EmitSelfRecursive {})
                 .expect_err("Should return an error");
-            assert_eq!(err, DispatchError::MaxDepthExceeded { depth: 10, max: 10 });
+            assert_eq!(err, DispatchError::MaxDepthExceeded { depth: 11, max: 10 });
         }
     }
 
@@ -368,7 +368,7 @@ mod tests {
 
             impl Middleware<SimpleState, Event> for ShortCircuitMiddleware {
                 fn wrap(self: Box<Self>, _: Next<SimpleState, Event>) -> Next<SimpleState, Event> {
-                    Box::new(|_, _| None)
+                    Box::new(|_, _| vec![])
                 }
             }
 
@@ -397,6 +397,10 @@ mod tests {
                     push_msg("Pre-Middleware2"),
                     push_msg("Post-Middleware2"),
                 )),
+                Box::new(ProbeMiddleware::<SimpleState, Event>::new(
+                    push_msg("Pre-Middleware3"),
+                    push_msg("Post-Middleware3"),
+                )),
             ];
 
             let mut store = make_store(middlewares);
@@ -410,6 +414,8 @@ mod tests {
                 vec![
                     "Pre-Middleware1",
                     "Pre-Middleware2",
+                    "Pre-Middleware3",
+                    "Post-Middleware3",
                     "Post-Middleware2",
                     "Post-Middleware1",
                 ]

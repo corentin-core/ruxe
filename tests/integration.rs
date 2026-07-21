@@ -62,10 +62,10 @@ impl SliceReducer for CountReducer {
         match event {
             Event::Increment => {
                 slice.value += 1;
-                None
+                vec![]
             }
-            Event::Ping => Some(vec![Event::Pong]),
-            _ => None,
+            Event::Ping => vec![Event::Pong],
+            _ => vec![],
         }
     }
 }
@@ -79,7 +79,7 @@ impl SliceReducer for LabelReducer {
             slice.text = text.clone();
         }
 
-        None
+        vec![]
     }
 }
 
