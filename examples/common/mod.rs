@@ -227,9 +227,9 @@ impl Middleware<PlantState, Event> for BatteryControlMiddleware {
                     reactive_power: 0.0,
                 };
                 println!("Issuing command: {} to reduce battery output.", command);
-                let mut side_events = next(state, event).unwrap_or_default();
+                let mut side_events = next(state, event);
                 side_events.push(command);
-                Some(side_events)
+                side_events
             } else {
                 next(state, event)
             }
@@ -258,7 +258,7 @@ impl SliceReducer for SolarReducer {
             };
         }
 
-        None
+        vec![]
     }
 }
 
@@ -282,7 +282,11 @@ impl SliceReducer for BatteryReducer {
                     reactive_power: *reactive_power,
                 };
 
-                (state.state_of_charge < 20.0).then(|| vec![Event::BatteryStateOfChargeLow])
+                if state.state_of_charge < 20.0 {
+                    vec![Event::BatteryStateOfChargeLow]
+                } else {
+                    vec![]
+                }
             }
             Event::BatteryCommand {
                 active_power,
@@ -290,9 +294,9 @@ impl SliceReducer for BatteryReducer {
             } => {
                 state.active_power = *active_power;
                 state.reactive_power = *reactive_power;
-                None
+                vec![]
             }
-            _ => None,
+            _ => vec![],
         }
     }
 }
@@ -321,7 +325,7 @@ impl SliceReducer for PowerMeterReducer {
                 voltage: *voltage,
             };
         };
-        None
+        vec![]
     }
 }
 
@@ -337,7 +341,7 @@ impl SliceReducer for SystemReducer {
             state.termination_requested = true;
         }
 
-        None
+        vec![]
     }
 }
 

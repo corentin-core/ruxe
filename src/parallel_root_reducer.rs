@@ -30,9 +30,9 @@ use std::marker::PhantomData;
 /// # Runtime behavior
 ///
 /// Each slice reducer runs on a Rayon worker thread, taking a `&mut Slice`
-/// projection of the state. Each may update the slice and produce optional
-/// side events. The side events are concatenated **in tuple declaration
-/// order** (deterministic, independent of execution order).
+/// projection of the state. Each may update the slice and produce side
+/// events. The side events are concatenated **in tuple declaration order**
+/// (deterministic, independent of execution order).
 ///
 /// # Bounds
 ///
@@ -120,7 +120,7 @@ pub(crate) trait ApplyReducers<Reducers, S, E, Indices> {
 /// Implementation when recursion reaches the end of the tuple of slice reducers.
 impl<Reducers, S, E> ApplyReducers<Reducers, S, E, HNil> for HNil {
     fn apply(&mut self, _reducers: &Reducers, _event: &E) -> ReducerOutput<E> {
-        None
+        Vec::new()
     }
 }
 
@@ -141,16 +141,9 @@ where
             || self.tail.apply(reducers, event),
         );
 
-        let mut side_events = head_output.unwrap_or_default();
-        if let Some(rest_side_events) = rest_output {
-            side_events.extend(rest_side_events);
-        }
-
-        if side_events.is_empty() {
-            None
-        } else {
-            Some(side_events)
-        }
+        let mut side_events = head_output;
+        side_events.extend(rest_output);
+        side_events
     }
 }
 
@@ -239,7 +232,7 @@ mod tests {
                     match event {
                         FirstValueUpdate { value } => {
                             slice.value = *value;
-                            None
+                            vec![]
                         }
                         _ => no_op(slice, event),
                     }
@@ -249,7 +242,7 @@ mod tests {
                     match event {
                         SecondValueUpdate { value } => {
                             slice.value = *value;
-                            None
+                            vec![]
                         }
                         _ => no_op(slice, event),
                     }
@@ -259,9 +252,9 @@ mod tests {
                     match event {
                         ThirdValueUpdate { value } => {
                             slice.value = value.clone();
-                            None
+                            vec![]
                         }
-                        SecondValueUpdate { value: _ } => None,
+                        SecondValueUpdate { value: _ } => vec![],
                         _ => no_op(slice, event),
                     }
                 }),

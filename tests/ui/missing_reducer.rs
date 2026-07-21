@@ -70,9 +70,9 @@ fn main() {
             match event {
                 MyEvent::UpdateFirst(v) => {
                     slice.value = v.value;
-                    None
+                    vec![]
                 }
-                _ => None,
+                _ => vec![],
             }
         }
     }

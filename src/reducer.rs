@@ -3,9 +3,8 @@
 //! [`Reducer`] operates on the full state. [`SliceReducer`] operates on an
 //! isolated slice and composes with peers via tuple syntax (up to arity 12).
 
-/// The output of a reducer.
-/// Optional events to re-dispatch through the store.
-pub type ReducerOutput<E> = Option<Vec<E>>;
+/// The output of a reducer: events to re-dispatch through the store, empty for none.
+pub type ReducerOutput<E> = Vec<E>;
 
 /// A `Reducer` updates `state` according to `event`.
 ///

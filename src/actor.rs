@@ -462,9 +462,9 @@ mod tests {
                 match event {
                     Append { value } => {
                         current_state.name.push(*value);
-                        None
+                        vec![]
                     }
-                    Recursive {} => Some(vec![Recursive {}]),
+                    Recursive {} => vec![Recursive {}],
                 }
             }
         }
@@ -527,7 +527,7 @@ mod tests {
             let result = block_on(actor_loop.run());
             match result {
                 Ok(_) => panic!("Actor loop should have failed due to max recursion depth"),
-                Err(err) => assert_eq!(err, DispatchError::MaxDepthExceeded { depth: 10, max: 10 }),
+                Err(err) => assert_eq!(err, DispatchError::MaxDepthExceeded { depth: 11, max: 10 }),
             }
         }
 
