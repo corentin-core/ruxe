@@ -174,7 +174,7 @@ flowchart TB
     ParRR[ParallelRootReducer only] -.requires.-> SS[StateSlices on State]
 ```
 
-Slice reducers compose into a root reducer via either [`SequentialRootReducer<T>`] (applies them in order, threading state through `set_slice`) or [`ParallelRootReducer<L, E, Indices>`] (applies them on Rayon workers, with compile-time disjointness verification). `Next<S, E>` is the dispatch-chain closure each middleware wraps, and `DispatchError` is returned when side-event recursion exceeds the configured depth.
+Slice reducers compose into a root reducer via either [`SequentialRootReducer<T>`] (applies them in order, updating each slice in place) or [`ParallelRootReducer<L, E, Indices>`] (applies them on Rayon workers, with compile-time disjointness verification). `Next<S, E>` is the dispatch-chain closure each middleware wraps, and `DispatchError` is returned when side-event recursion exceeds the configured depth.
 
 For exact signatures, trait bounds, and runnable examples, see the rustdoc — run `cargo doc --open` (it will be published on docs.rs once ruxe ships to crates.io).
 

@@ -11,7 +11,7 @@ Both update the state and produce a `ReducerOutput` containing optional side eve
 to re-dispatch.
 
 `HasSlice<T>` bridges the global state to a slice: the user implements it on their
-state struct to expose each slice (`slice_mut`).
+state struct to expose each slice (`slice`).
 
 ```mermaid
 classDiagram
