@@ -1,6 +1,6 @@
 //! Sequential root reducer: applies a tuple of [`SliceReducer`]s in
-//! declaration order, threading the state through chained `set_slice`
-//! calls. See [`SequentialRootReducer`] for usage.
+//! declaration order, updating each slice in place. See
+//! [`SequentialRootReducer`] for usage.
 
 use crate::{HasSlice, Reducer, ReducerOutput, SliceReducer};
 
@@ -9,10 +9,9 @@ use crate::{HasSlice, Reducer, ReducerOutput, SliceReducer};
 ///
 /// # Behavior
 ///
-/// On each [`Reducer::reduce`] call, the state is cloned once, then each
-/// slice reducer is invoked in order. Each reducer's output replaces the
-/// corresponding slice (via [`HasSlice::set_slice`]) before the next reducer
-/// runs. Side events from all reducers are concatenated in tuple order.
+/// On each [`Reducer::reduce`] call, each slice reducer runs in order,
+/// updating its slice in place via [`HasSlice::slice`]. Side events from all
+/// reducers are concatenated in tuple order.
 ///
 /// # When to use
 ///
